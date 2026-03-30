@@ -1,0 +1,335 @@
+# Proyecto Big Data KDD - Java 21 + Docker
+
+Implementacion de una plataforma Big Data orientada a logistica y transporte siguiendo el ciclo KDD del enunciado, usando Java 21 para la aplicacion Spark y una arquitectura desplegada con contenedores Docker.
+
+## Arquitectura
+
+- `NiFi 2.7.0`: ingesta desde API/logs simulados y publicacion en Kafka.
+- `Kafka 3.9.1 (KRaft)`: bus de eventos para crudo y filtrado.
+- `gps-generator`: generador continuo de logs GPS para alimentar NiFi (`nifi/input`).
+- `raw-hdfs-loader`: sincronizacion continua de raw archivado por NiFi hacia HDFS (`/data/raw/nifi`).
+- `Hadoop 3.4.2 pseudodistribuido`: HDFS + YARN en un unico nodo.
+- `Hive`: almacenamiento SQL historico y catalogo.
+- `Cassandra 5.0`: ultimo estado por vehiculo para consultas de baja latencia.
+- `Spark 3.5.x + GraphFrames`: limpieza, enriquecimiento, streaming, analisis de grafos y modelo ML de riesgo de retraso.
+- `Airflow 2.10.x`: orquestacion del mantenimiento mensual.
+- `Dashboard Web`: visualizacion en tiempo real de vehiculos (mapa), trazas de movimiento y analitica de rutas con grafo + impacto meteorologico.
+
+## Estructura
+
+- `docker-compose.yml`: stack completo.
+- `docker/`: Dockerfiles y configuracion de infraestructura.
+- `spark-app/`: proyecto Maven en Java 21 para Spark.
+- `dags/`: DAGs de Airflow.
+- `data/`: datasets semilla para demo.
+- `nifi/`: material para la ingesta y notas del flujo.
+- `docs/`: documentacion tecnica y pasos operativos.
+- `dashboard/`: servidor web ligero + frontend del dashboard logistico.
+
+Indice maestro de entrega:
+
+- `docs/ENTREGA.md`
+- `docs/architecture.md` (incluye diagrama `docs/architecture-diagram.svg`)
+- `CHANGELOG.md` (historial consolidado de cambios)
+
+## Arranque rapido
+
+1. Construir y levantar la plataforma:
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+2. Compilar la aplicacion Spark:
+
+   ```bash
+   docker compose exec spark-client mvn -f /opt/spark-app/pom.xml -DskipTests package
+   ```
+
+3. Cargar datasets de demo en HDFS:
+
+   ```bash
+   docker compose exec hadoop bash /opt/hadoop/bootstrap/load-seed-data.sh
+   ```
+
+4. Ejecutar el job batch/grafo:
+
+   ```bash
+   docker compose exec spark-client bash /opt/spark-app/run-batch.sh
+   ```
+
+5. Ejecutar el job de streaming:
+
+   ```bash
+   docker compose exec spark-client bash /opt/spark-app/run-streaming.sh
+   ```
+
+   Opcional (forzar reproceso desde el inicio de los topics):
+
+   ```bash
+   docker compose exec -e STREAMING_STARTING_OFFSETS=earliest spark-client bash /opt/spark-app/run-streaming.sh
+   ```
+
+   Opcional (zona horaria SQL de Spark; por defecto `Europe/Madrid`):
+
+   ```bash
+   docker compose exec -e SPARK_SQL_TIMEZONE=Europe/Madrid spark-client bash /opt/spark-app/run-streaming.sh
+   ```
+
+6. Configurar y arrancar flujo NiFi automaticamente (sin UI manual):
+
+   ```bash
+   ./scripts/bootstrap_nifi_flow.sh
+   ```
+
+   El bootstrap usa por defecto `NIFI_PG_NAME=kdd_ingestion_auto_v8` y crea dos subgrupos:
+   - `gps_ingestion`
+   - `weather_ingestion`
+
+7. Abrir dashboard logistico (mapa + grafos + meteo):
+
+   ```bash
+   docker compose up -d dashboard
+   ```
+
+   URL:
+
+   - `http://localhost:8501`
+
+   Comportamiento actual de filtros:
+   - Vista Tiempo Real (izquierda): usa `Origen RT` / `Destino RT` y afecta solo esa vista.
+   - Vista Analisis Logistico (derecha): usa `Origen` / `Destino` y afecta solo mapa/logistica/tablas de esa columna.
+   - Ambas vistas estan desacopladas intencionalmente.
+
+## Scripts operativos
+
+- Arranque completo del stack:
+
+  ```bash
+  ./scripts/start_kdd.sh
+  ```
+
+  Incluye automaticamente:
+  - bootstrap de flujo NiFi,
+  - `scripts/ensure_hive_streaming_compat.sh`,
+  - sanity check Hive (`SHOW TABLES` + `COUNT(*)` sobre vistas Madrid),
+  - repoblado automatico de meteo en Hive desde Cassandra si `weather_rows=0`.
+
+- Parada completa del stack:
+
+  ```bash
+  ./scripts/stop_kdd.sh
+  ```
+
+- Limpieza de estado streaming (tablas Hive + checkpoints HDFS):
+
+  ```bash
+  ./scripts/reset_streaming_state.sh
+  ```
+
+- Reset de demo (limpieza de eventos locales + reset streaming + recrear generadores):
+
+  ```bash
+  ./scripts/reset_demo_data.sh
+  ```
+
+  Hard reset (incluye limpieza de `/data/raw/nifi` en HDFS):
+
+  ```bash
+  ./scripts/reset_demo_data.sh --hard
+  ```
+
+## Validacion automatica Hive
+
+Para validar en un solo comando la escritura batch + streaming en Hive:
+
+```bash
+chmod +x scripts/validate_hive_pipeline.sh
+./scripts/validate_hive_pipeline.sh
+```
+
+Documentacion detallada:
+
+- `docs/hive-validation.md`
+
+Para limpiar tablas/checkpoints de streaming (quitar estado de pruebas):
+
+```bash
+chmod +x scripts/reset_streaming_state.sh
+./scripts/reset_streaming_state.sh
+```
+
+Validacion especifica del fix de parseo meteo (numeros y numeros-string):
+
+```bash
+./scripts/validate_weather_parsing_fix.sh
+```
+
+Garantizar compatibilidad Hive de objetos streaming (tablas/vistas Madrid):
+
+```bash
+./scripts/ensure_hive_streaming_compat.sh
+```
+
+Repoblar Hive meteo desde Cassandra (cuando `v_weather_observations_madrid` esta vacia):
+
+```bash
+./scripts/repopulate_hive_weather_from_cassandra.sh
+```
+
+## Formato de datos (raw vs procesado)
+
+Se aplica la separacion recomendada:
+
+- `Raw`: eventos sin transformar en `JSON/JSONL`.
+- `Procesado`: datasets limpios y agregados en `Parquet` (consultables via Hive).
+
+Referencias del proyecto:
+
+- Raw GPS base Spark batch: `hdfs://hadoop:9000/data/raw/gps_events.jsonl`
+- Raw NiFi archivado en host: `nifi/raw-archive/`
+- Raw NiFi sincronizado a HDFS: `/data/raw/nifi`
+- Curated batch en Parquet: `hdfs://hadoop:9000/data/curated/enriched_events`
+- Curated streaming fallback Parquet:
+  - `hdfs://hadoop:9000/data/curated/delay_metrics_streaming`
+  - `hdfs://hadoop:9000/data/curated/weather_observations_streaming`
+
+Comprobacion rapida:
+
+```bash
+sg docker -c "docker compose exec -T hadoop hdfs dfs -ls -R /data/raw | head -n 40"
+sg docker -c "docker compose exec -T hadoop hdfs dfs -ls -R /data/curated | head -n 80"
+```
+
+### Matriz operativa (resumen)
+
+| Flujo | Kafka | HDFS | Hive |
+|---|---|---|---|
+| GPS raw | `transport.raw` | `/data/raw/nifi/gps/...` | No aplica |
+| GPS filtrado | `transport.filtered` | `/data/curated/delay_metrics_streaming` | `transport_analytics.delay_metrics_streaming` |
+| Weather raw | `transport.weather.raw` | `/data/raw/nifi/weather/...` | No aplica |
+| Weather filtrado | `transport.weather.filtered` | `/data/curated/weather_observations_streaming` | `transport_analytics.v_weather_observations_madrid` (vista operativa) |
+| Batch historico GPS | No aplica | `/data/curated/enriched_events` | `transport_analytics.enriched_events`, `transport_analytics.delay_metrics_batch`, `transport_analytics.route_graph_metrics` |
+
+Detalle operativo completo:
+
+- `docs/operations.md` (seccion `Matriz operativa end-to-end`)
+
+## Vistas Hive en hora Madrid
+
+Se han creado vistas para consultar timestamps en `Europe/Madrid` sin conversion manual:
+
+- `transport_analytics.v_weather_observations_madrid`
+- `transport_analytics.v_delay_metrics_streaming_madrid`
+
+Ejemplos:
+
+```sql
+SELECT weather_event_id, weather_timestamp_utc, weather_timestamp_madrid
+FROM transport_analytics.v_weather_observations_madrid
+ORDER BY weather_timestamp_utc DESC
+LIMIT 10;
+```
+
+```sql
+SELECT warehouse_id, window_start_utc, window_start_madrid, window_end_utc, window_end_madrid
+FROM transport_analytics.v_delay_metrics_streaming_madrid
+ORDER BY window_start_utc DESC
+LIMIT 10;
+```
+
+Nota de compatibilidad:
+
+- Si el estado streaming fue limpiado, el proyecto recrea objetos base con `scripts/ensure_hive_streaming_compat.sh`.
+- Esto evita errores `TABLE_OR_VIEW_NOT_FOUND` en las vistas Madrid aunque no haya datos todavia.
+
+## Servicios
+
+
+
+- NiFi: `http://localhost:8443/nifi`
+- Kafka broker interno: `kafka:9092`
+- Hadoop/YARN: `http://localhost:9870`, `http://localhost:8088`
+- HiveServer2: `localhost:10000`
+- Cassandra CQL: `localhost:9042`
+- Airflow: `http://localhost:8080`
+- Dashboard logistico: `http://localhost:8501`
+
+Usuario NiFi:
+
+- usuario: `admin`
+- password: `adminadminadmin`
+
+Usuario por defecto Airflow:
+
+- usuario: `airflow`
+- password: `airflow`
+
+DAGs relevantes:
+
+- `logistics_kdd_monthly_maintenance` (mantenimiento mensual)
+- `kdd_daily_healthcheck` (checklist diario automatizado)
+- `kdd_hourly_healthcheck` (checklist horario automatizado)
+- `kdd_bootstrap_stack` (arranque del stack no-Airflow desde Airflow)
+
+Auto-recuperacion meteo en DAGs de healthcheck:
+
+- `kdd_daily_healthcheck` y `kdd_hourly_healthcheck` incluyen la tarea `repopulate_hive_weather_if_empty`.
+- Si `SELECT COUNT(*) FROM transport_analytics.v_weather_observations_madrid` devuelve `0`, ejecutan `./scripts/repopulate_hive_weather_from_cassandra.sh` antes del smoke query meteo.
+- Si hay filas, no repueblan.
+
+Alertas Airflow:
+
+- Todos los DAGs incorporan callback de fallo.
+- Para email en fallo: exporta `AIRFLOW_ALERT_EMAIL` en el entorno de Airflow.
+
+Arranque "Airflow primero y despues stack desde DAG":
+
+```bash
+./scripts/start_airflow_then_stack.sh
+```
+
+Limpieza de runs `failed` historicos de healthchecks (modo simulacion + apply):
+
+```bash
+./scripts/cleanup_airflow_failed_runs.sh
+./scripts/cleanup_airflow_failed_runs.sh --apply
+```
+
+Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v8`):
+
+```bash
+./scripts/cleanup_nifi_legacy_pgs.py
+```
+
+## Cambios recientes (30/03/2026)
+
+- Airflow:
+  - Corregidas `smoke_query_weather` y `smoke_query_delay` en healthchecks diario/horario para evitar caida cuando faltan tablas streaming fuente.
+  - Runs historicos `failed` limpiados para `kdd_daily_healthcheck` y `kdd_hourly_healthcheck`.
+  - Auto-recuperacion de meteo Hive en healthchecks (`repopulate_hive_weather_if_empty`) cuando `v_weather_observations_madrid` queda en `0` filas.
+- NiFi:
+  - Nuevo bootstrap visual por subflujos: `gps_ingestion` y `weather_ingestion`.
+  - Proceso de limpieza legacy disponible en `scripts/cleanup_nifi_legacy_pgs.py`.
+- Arranque:
+  - `scripts/start_kdd.sh` y `scripts/bootstrap_nifi_flow.sh` apuntan por defecto a `kdd_ingestion_auto_v8`.
+  - `scripts/start_kdd.sh` repuebla meteo en Hive desde Cassandra si la vista Madrid esta vacia.
+- Spark + Dashboard:
+  - El dashboard usa Cassandra como fuente primaria de clima (`transport.weather_observations_recent`) con fallback a `nifi/raw-archive/weather`.
+  - `LogisticsAnalyticsJob` en modo streaming persiste observaciones meteo recientes en Cassandra para mejorar precision de ruta y panel de clima.
+  - `spark-app/run-streaming.sh` y `spark-app/run-batch.sh` recompilan el JAR automaticamente si hay cambios en `src/` o `pom.xml`.
+  - Ajuste de ETA en tiempo real: resincronizacion inmediata cuando hay divergencia grande entre ETA cacheado y ETA fisico (distancia/velocidad) o cambio de destino estimado.
+
+## Notas
+
+- La arquitectura Hadoop es de nodo unico en modo pseudodistribuido.
+- El proyecto prioriza reproducibilidad local y separa claramente batch, streaming y orquestacion.
+- Se contempla ingesta meteo (API publica) hacia `transport.weather.raw` y `transport.weather.filtered`, con persistencia en Hive.
+- Hay documentacion operativa en `docs/architecture.md`, `docs/nifi-flow.md`, `docs/nifi-weather-template.md` y `docs/hive-validation.md`.
+- Guia operativa consolidada: `docs/operations.md`.
+- Guia de dashboard y leyenda visual: `docs/dashboard.md`.
+- Endpoint debug de fuentes del dashboard: `GET /api/debug/sources`.
+- Plan TODO de cumplimiento del enunciado por fases KDD: `docs/kdd-todo.md`.
+- Bitacora de cambios de la iteracion 30/03/2026: `docs/release-notes-2026-03-30.md`.
+- Memoria tecnica detallada del sistema (entrega): `docs/memoria-tecnica-sistema.md`.
+- Resumen ejecutivo (1-2 paginas) para portada/anexo inicial: `docs/resumen-ejecutivo-memoria.md`.

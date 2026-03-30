@@ -1,0 +1,12 @@
+id,name,type,criticality
+MAD,Madrid Hub,warehouse,high
+BCN,Barcelona Port,warehouse,high
+VAL,Valencia Crossdock,warehouse,medium
+SEV,Seville Depot,warehouse,medium
+LIS,Lisbon Hub,warehouse,high
+OPO,Porto Depot,warehouse,medium
+ZAR,Zaragoza Inland Port,warehouse,medium
+BIO,Bilbao Atlantic Node,warehouse,medium
+ACO,A Coruna Atlantic Hub,warehouse,medium
+ALM,Almeria Mediterranean Depot,warehouse,medium
+VLL,Valladolid Inland Hub,warehouse,medium

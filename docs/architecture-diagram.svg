@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="980" viewBox="0 0 1680 980" role="img" aria-label="Arquitectura del Proyecto Big Data KDD">
+  <defs>
+    <style>
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #0b2545; }
+      .subtitle { font: 500 18px 'Segoe UI', Arial, sans-serif; fill: #1f3b61; }
+      .box { fill: #f8fbff; stroke: #1f3b61; stroke-width: 2; rx: 16; ry: 16; }
+      .ingest { fill: #e8f4ff; }
+      .stream { fill: #edf8e9; }
+      .store { fill: #fff3e6; }
+      .ops { fill: #f2e9ff; }
+      .label { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #0b2545; }
+      .text { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #19324d; }
+      .arrow { stroke: #1f3b61; stroke-width: 2.5; fill: none; marker-end: url(#arrowHead); }
+      .arrow-d { stroke: #5b6f8a; stroke-width: 2; fill: none; stroke-dasharray: 8 6; marker-end: url(#arrowHeadD); }
+    </style>
+    <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#1f3b61"/>
+    </marker>
+    <marker id="arrowHeadD" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#5b6f8a"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1680" height="980" fill="#ffffff" />
+
+  <text x="48" y="58" class="title">Arquitectura Proyecto Big Data KDD - Logistica</text>
+  <text x="48" y="86" class="subtitle">Estado final de entrega (30/03/2026) | Ingesta NiFi + Kafka | Spark batch/streaming | Hive/Cassandra | Dashboard desacoplado</text>
+
+  <rect x="48" y="130" width="290" height="120" class="box ingest"/>
+  <text x="68" y="162" class="label">gps-generator</text>
+  <text x="68" y="188" class="text">Eventos GPS JSONL</text>
+  <text x="68" y="210" class="text">nifi/input/gps_*.jsonl</text>
+
+  <rect x="48" y="290" width="290" height="120" class="box ingest"/>
+  <text x="68" y="322" class="label">Open-Meteo API</text>
+  <text x="68" y="348" class="text">Temperatura, lluvia, viento, codigo</text>
+  <text x="68" y="370" class="text">Consulta periodica desde NiFi</text>
+
+  <rect x="420" y="170" width="360" height="240" class="box ingest"/>
+  <text x="440" y="202" class="label">NiFi 2.7.0</text>
+  <text x="440" y="228" class="text">PG: kdd_ingestion_auto_v8</text>
+  <text x="440" y="252" class="text">Subgrupos: gps_ingestion / weather_ingestion</text>
+  <text x="440" y="276" class="text">Publica en Kafka + archiva raw local</text>
+  <text x="440" y="300" class="text">raw-archive/{gps,weather,failures}</text>
+  <text x="440" y="324" class="text">Controller: Kafka3ConnectionService</text>
+
+  <rect x="860" y="120" width="330" height="300" class="box stream"/>
+  <text x="880" y="152" class="label">Kafka 3.9.1</text>
+  <text x="880" y="178" class="text">Topics de ingesta:</text>
+  <text x="880" y="202" class="text">- transport.raw</text>
+  <text x="880" y="224" class="text">- transport.filtered</text>
+  <text x="880" y="246" class="text">- transport.weather.raw</text>
+  <text x="880" y="268" class="text">- transport.weather.filtered</text>
+  <text x="880" y="300" class="text">Backbone de batch/streaming</text>
+
+  <rect x="420" y="470" width="360" height="170" class="box store"/>
+  <text x="440" y="502" class="label">raw-hdfs-loader + Hadoop HDFS</text>
+  <text x="440" y="528" class="text">Sincroniza raw de NiFi a HDFS</text>
+  <text x="440" y="552" class="text">/data/raw/nifi/gps</text>
+  <text x="440" y="574" class="text">/data/raw/nifi/weather</text>
+  <text x="440" y="596" class="text">+ seeds raw historicos</text>
+
+  <rect x="860" y="500" width="360" height="230" class="box stream"/>
+  <text x="880" y="532" class="label">Spark 3.5 + GraphFrames</text>
+  <text x="880" y="558" class="text">Batch: enriquecimiento, grafos, ML</text>
+  <text x="880" y="580" class="text">Streaming: GPS + clima desde Kafka</text>
+  <text x="880" y="602" class="text">Watermarks + deduplicacion</text>
+  <text x="880" y="624" class="text">Escribe Hive + Cassandra</text>
+  <text x="880" y="646" class="text">Fallback Parquet curated en HDFS</text>
+  <text x="880" y="676" class="text">(delay_metrics / weather_observations)</text>
+
+  <rect x="1270" y="460" width="340" height="150" class="box store"/>
+  <text x="1290" y="492" class="label">Hive (transport_analytics)</text>
+  <text x="1290" y="518" class="text">Tablas batch + streaming</text>
+  <text x="1290" y="540" class="text">Vistas en hora Madrid</text>
+  <text x="1290" y="562" class="text">Consulta SQL para reporting</text>
+
+  <rect x="1270" y="640" width="340" height="120" class="box store"/>
+  <text x="1290" y="672" class="label">Cassandra 5.0</text>
+  <text x="1290" y="698" class="text">vehicle_latest_state</text>
+  <text x="1290" y="720" class="text">weather_observations_recent</text>
+
+  <rect x="1270" y="790" width="340" height="130" class="box ops"/>
+  <text x="1290" y="822" class="label">Dashboard Web</text>
+  <text x="1290" y="848" class="text">Tiempo Real: filtros RT propios</text>
+  <text x="1290" y="870" class="text">Red Logistica: filtros propios</text>
+  <text x="1290" y="892" class="text">Fuente principal: Cassandra</text>
+
+  <rect x="420" y="700" width="360" height="180" class="box ops"/>
+  <text x="440" y="732" class="label">Airflow 2.10</text>
+  <text x="440" y="758" class="text">kdd_hourly_healthcheck</text>
+  <text x="440" y="780" class="text">kdd_daily_healthcheck</text>
+  <text x="440" y="802" class="text">logistics_kdd_monthly_maintenance</text>
+  <text x="440" y="824" class="text">kdd_bootstrap_stack</text>
+
+  <path d="M338,190 C380,190 390,220 420,220" class="arrow"/>
+  <path d="M338,350 C380,350 390,300 420,300" class="arrow"/>
+  <path d="M780,240 C810,240 830,220 860,220" class="arrow"/>
+  <path d="M780,300 C820,320 830,340 860,350" class="arrow"/>
+
+  <path d="M620,410 C620,440 620,450 620,470" class="arrow"/>
+  <path d="M1190,300 C1230,300 1240,420 1270,520" class="arrow"/>
+  <path d="M620,640 C700,640 760,610 860,610" class="arrow"/>
+  <path d="M1040,730 C1130,730 1180,700 1270,700" class="arrow"/>
+  <path d="M1040,560 C1140,560 1180,560 1270,560" class="arrow"/>
+  <path d="M1440,760 C1440,775 1440,780 1440,790" class="arrow"/>
+
+  <path d="M780,780 C920,780 1030,820 1270,850" class="arrow-d"/>
+  <path d="M1220,700 C1240,760 1250,790 1270,820" class="arrow-d"/>
+
+  <text x="58" y="950" class="subtitle">Nota: la vista Tiempo Real y la vista de Red Logistica estan desacopladas; cada una mantiene filtros independientes.</text>
+</svg>

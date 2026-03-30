@@ -1,0 +1,10 @@
+vehicle_id,vehicle_type,capacity_kg,status
+TRUCK-001,truck,18000,active
+TRUCK-002,van,4500,active
+TRUCK-003,truck,20000,active
+TRUCK-004,truck,16000,maintenance
+TRUCK-005,truck,22000,active
+TRUCK-006,van,5000,active
+TRUCK-007,truck,17000,active
+TRUCK-008,truck,19000,active
+TRUCK-009,van,4200,active

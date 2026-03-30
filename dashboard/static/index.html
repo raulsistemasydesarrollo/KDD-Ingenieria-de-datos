@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Logistics Intelligence Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-row">
+        <div>
+          <h1>Logistics Intelligence Dashboard</h1>
+          <p>Mapa en tiempo real, movimiento de flota y analisis de rutas con impacto meteorologico.</p>
+          <div id="data-source-badges" class="source-badges">
+            <span class="source-badge source-unknown">Vehiculos: -</span>
+            <span class="source-badge source-unknown">Clima: -</span>
+          </div>
+          <div id="fleet-freshness" class="fleet-freshness">Flota: sin datos</div>
+        </div>
+        <button id="theme-btn" type="button">Modo claro</button>
+      </div>
+    </header>
+
+    <section class="cards" id="overview-cards"></section>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel-title-row">
+          <h2>Operacion en Tiempo Real</h2>
+          <button id="refresh-btn">Actualizar</button>
+        </div>
+        <div id="map"></div>
+        <div class="legend" id="fleet-legend">
+          <span><i class="dot warehouse-high"></i>Almacen critico</span>
+          <span><i class="dot warehouse-medium"></i>Almacen medio</span>
+          <span><i class="dot vehicle-delay"></i>Camion con retraso alto</span>
+          <span><i class="line route-weather"></i>Traza y rumbo (solo vehiculo seleccionado)</span>
+        </div>
+        <div class="row">
+          <label for="rt-source-select">Origen RT</label>
+          <select id="rt-source-select"></select>
+          <label for="rt-target-select">Destino RT</label>
+          <select id="rt-target-select"></select>
+        </div>
+        <div class="row">
+          <label for="vehicle-select">Historial vehiculo</label>
+          <select id="vehicle-select"></select>
+          <button id="play-btn">Pausar animacion</button>
+        </div>
+        <div class="summary" id="selected-vehicle-panel">
+          Selecciona un vehiculo para ver su ruta reciente, rumbo y siguiente destino estimado.
+        </div>
+        <div class="table-wrap">
+          <table id="vehicle-table">
+            <thead>
+              <tr>
+                <th>Vehiculo</th>
+                <th>Almacen</th>
+                <th>Ruta</th>
+                <th>Delay (min)</th>
+                <th>Velocidad</th>
+                <th>ETA</th>
+                <th>Ultimo evento</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Analisis de Red Logistica (Grafos)</h2>
+        <div class="row">
+          <label for="source-select">Origen</label>
+          <select id="source-select"></select>
+          <label for="target-select">Destino</label>
+          <select id="target-select"></select>
+        </div>
+        <div class="row">
+          <label for="profile-select">Perfil</label>
+          <select id="profile-select">
+            <option value="balanced">Balanceado</option>
+            <option value="fastest">Mas rapido</option>
+            <option value="resilient">Resiliente al clima</option>
+          </select>
+          <button id="route-btn">Calcular mejor ruta</button>
+          <span id="route-status" class="route-status">Pendiente de calculo</span>
+        </div>
+        <div id="network-map"></div>
+        <div class="table-wrap">
+          <table id="all-routes-table">
+            <thead>
+              <tr>
+                <th>Ruta</th>
+                <th>Distancia (km)</th>
+                <th>Delay medio (min)</th>
+                <th>Tiempo base</th>
+                <th>Pen. meteo</th>
+                <th>Tiempo estimado</th>
+                <th>Perfil</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7">Cargando rutas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap small">
+          <table id="route-table">
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Estado</td><td>Selecciona origen y destino para calcular ruta</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Clima reciente (aplicado a ruta seleccionada)</h3>
+        <div class="table-wrap small">
+          <table id="weather-table">
+            <thead>
+              <tr>
+                <th>Observacion</th>
+                <th>Temp (C)</th>
+                <th>Lluvia (mm)</th>
+                <th>Viento (km/h)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
