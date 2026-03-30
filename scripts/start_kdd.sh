@@ -46,7 +46,7 @@ wait_for_http "API de NiFi" "https://localhost:8443/nifi-api/access/config" "200
 
 echo
 echo "Bootstrap del flujo de NiFi..."
-export NIFI_PG_NAME="${NIFI_PG_NAME:-kdd_ingestion_auto_v8}"
+export NIFI_PG_NAME="${NIFI_PG_NAME:-kdd_ingestion_auto_v9}"
 BOOTSTRAP_OK=0
 for i in $(seq 1 8); do
   if ./scripts/bootstrap_nifi_flow.sh >/tmp/bootstrap_nifi_flow.log 2>&1; then

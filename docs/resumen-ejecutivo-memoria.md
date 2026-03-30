@@ -56,6 +56,7 @@ El sistema esta empaquetado en Docker Compose, con scripts de arranque, validaci
   - shortest paths,
   - scoring ML de riesgo.
 - Spark streaming procesa GPS y clima filtrado desde Kafka, con watermarks y deduplicacion, y persiste resultados en Hive.
+- Spark streaming persiste ademas eventos enriquecidos en tiempo real en `transport_analytics.enriched_events_streaming`.
 
 ### Almacenamiento y consulta
 
@@ -96,7 +97,7 @@ Se incorporaron mejoras de estabilidad relevantes para entrega:
 ## 5. Estado tecnico final (entrega)
 
 - NiFi:
-  - Process Group activo: `kdd_ingestion_auto_v8`
+  - Process Group activo: `kdd_ingestion_auto_v9`
   - Subgrupos: `gps_ingestion`, `weather_ingestion`
 - Airflow:
   - DAGs de healthcheck estabilizados y sin failed pendientes en la validacion operativa.

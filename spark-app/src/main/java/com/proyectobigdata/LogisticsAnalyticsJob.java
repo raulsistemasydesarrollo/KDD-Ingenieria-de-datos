@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.functions.avg;
 import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.functions.coalesce;
 import static org.apache.spark.sql.functions.count;
 import static org.apache.spark.sql.functions.from_json;
 import static org.apache.spark.sql.functions.get_json_object;
@@ -65,6 +66,8 @@ public final class LogisticsAnalyticsJob {
             "hdfs://hadoop:9000/data/curated/delay_metrics_streaming";
     private static final String STREAMING_WEATHER_FALLBACK_PATH =
             "hdfs://hadoop:9000/data/curated/weather_observations_streaming";
+    private static final String STREAMING_ENRICHED_EVENTS_FALLBACK_PATH =
+            "hdfs://hadoop:9000/data/curated/enriched_events_streaming";
     private static final String DELAY_RISK_MODEL_PATH = "hdfs://hadoop:9000/models/delay_risk_rf";
 
     private LogisticsAnalyticsJob() {
@@ -216,7 +219,14 @@ public final class LogisticsAnalyticsJob {
 
         VoidFunction2<Dataset<Row>, Long> metricsBatchWriter =
                 (batch, batchId) -> appendToHiveTable(batch, DATABASE + ".delay_metrics_streaming");
-        VoidFunction2<Dataset<Row>, Long> stateBatchWriter = (batch, batchId) -> saveLatestVehicleState(batch);
+        VoidFunction2<Dataset<Row>, Long> stateBatchWriter =
+                (batch, batchId) -> {
+                    appendToHiveTable(
+                            batch,
+                            DATABASE + ".enriched_events_streaming",
+                            STREAMING_ENRICHED_EVENTS_FALLBACK_PATH);
+                    saveLatestVehicleState(batch);
+                };
         VoidFunction2<Dataset<Row>, Long> weatherBatchWriter =
                 (batch, batchId) -> {
                     appendToHiveTable(
@@ -455,7 +465,11 @@ public final class LogisticsAnalyticsJob {
     private static Dataset<Row> cleanAndNormalizeEvents(Dataset<Row> events) {
         // Estandarizacion de eventos GPS: cast tipos, timestamp y filtros de calidad.
         return events
-                .withColumn("event_timestamp", to_timestamp(col("event_time")))
+                .withColumn(
+                        "event_timestamp",
+                        coalesce(
+                                to_timestamp(col("event_time"), "yyyy-MM-dd'T'HH:mm:ssX"),
+                                to_timestamp(col("event_time"))))
                 .withColumn("delay_minutes", col("delay_minutes").cast(DataTypes.IntegerType))
                 .withColumn("speed_kmh", col("speed_kmh").cast(DataTypes.DoubleType))
                 .na().fill(0, new String[]{"delay_minutes"})
@@ -590,7 +604,11 @@ public final class LogisticsAnalyticsJob {
     private static Dataset<Row> cleanAndNormalizeWeather(Dataset<Row> weatherEvents) {
         // Estandarizacion de clima con cast tolerante (numeric/string numeric).
         return weatherEvents
-                .withColumn("weather_timestamp", to_timestamp(col("observation_time")))
+                .withColumn(
+                        "weather_timestamp",
+                        coalesce(
+                                to_timestamp(col("observation_time"), "yyyy-MM-dd'T'HH:mm:ssX"),
+                                to_timestamp(col("observation_time"))))
                 .withColumn("temperature_c", col("temperature_c").cast(DataTypes.DoubleType))
                 .withColumn("precipitation_mm", col("precipitation_mm").cast(DataTypes.DoubleType))
                 .withColumn("wind_kmh", col("wind_kmh").cast(DataTypes.DoubleType))

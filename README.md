@@ -82,7 +82,7 @@ Indice maestro de entrega:
    ./scripts/bootstrap_nifi_flow.sh
    ```
 
-   El bootstrap usa por defecto `NIFI_PG_NAME=kdd_ingestion_auto_v8` y crea dos subgrupos:
+   El bootstrap usa por defecto `NIFI_PG_NAME=kdd_ingestion_auto_v9` y crea dos subgrupos:
    - `gps_ingestion`
    - `weather_ingestion`
 
@@ -193,6 +193,7 @@ Referencias del proyecto:
 - Curated streaming fallback Parquet:
   - `hdfs://hadoop:9000/data/curated/delay_metrics_streaming`
   - `hdfs://hadoop:9000/data/curated/weather_observations_streaming`
+  - `hdfs://hadoop:9000/data/curated/enriched_events_streaming`
 
 Comprobacion rapida:
 
@@ -207,6 +208,7 @@ sg docker -c "docker compose exec -T hadoop hdfs dfs -ls -R /data/curated | head
 |---|---|---|---|
 | GPS raw | `transport.raw` | `/data/raw/nifi/gps/...` | No aplica |
 | GPS filtrado | `transport.filtered` | `/data/curated/delay_metrics_streaming` | `transport_analytics.delay_metrics_streaming` |
+| GPS enriquecido streaming | `transport.filtered` | `/data/curated/enriched_events_streaming` | `transport_analytics.enriched_events_streaming` |
 | Weather raw | `transport.weather.raw` | `/data/raw/nifi/weather/...` | No aplica |
 | Weather filtrado | `transport.weather.filtered` | `/data/curated/weather_observations_streaming` | `transport_analytics.v_weather_observations_madrid` (vista operativa) |
 | Batch historico GPS | No aplica | `/data/curated/enriched_events` | `transport_analytics.enriched_events`, `transport_analytics.delay_metrics_batch`, `transport_analytics.route_graph_metrics` |
@@ -296,7 +298,7 @@ Limpieza de runs `failed` historicos de healthchecks (modo simulacion + apply):
 ./scripts/cleanup_airflow_failed_runs.sh --apply
 ```
 
-Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v8`):
+Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 
 ```bash
 ./scripts/cleanup_nifi_legacy_pgs.py
@@ -312,13 +314,18 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v8`):
   - Nuevo bootstrap visual por subflujos: `gps_ingestion` y `weather_ingestion`.
   - Proceso de limpieza legacy disponible en `scripts/cleanup_nifi_legacy_pgs.py`.
 - Arranque:
-  - `scripts/start_kdd.sh` y `scripts/bootstrap_nifi_flow.sh` apuntan por defecto a `kdd_ingestion_auto_v8`.
+  - `scripts/start_kdd.sh` y `scripts/bootstrap_nifi_flow.sh` apuntan por defecto a `kdd_ingestion_auto_v9`.
   - `scripts/start_kdd.sh` repuebla meteo en Hive desde Cassandra si la vista Madrid esta vacia.
 - Spark + Dashboard:
   - El dashboard usa Cassandra como fuente primaria de clima (`transport.weather_observations_recent`) con fallback a `nifi/raw-archive/weather`.
   - `LogisticsAnalyticsJob` en modo streaming persiste observaciones meteo recientes en Cassandra para mejorar precision de ruta y panel de clima.
+  - `LogisticsAnalyticsJob` en modo streaming persiste tambien `transport_analytics.enriched_events_streaming` en Hive (ademas de `delay_metrics_streaming` y `weather_observations_streaming`).
   - `spark-app/run-streaming.sh` y `spark-app/run-batch.sh` recompilan el JAR automaticamente si hay cambios en `src/` o `pom.xml`.
   - Ajuste de ETA en tiempo real: resincronizacion inmediata cuando hay divergencia grande entre ETA cacheado y ETA fisico (distancia/velocidad) o cambio de destino estimado.
+- GPS/NiFi:
+  - El generador GPS usa rutas realistas derivadas del grafo logistico y ya no etiquetas aleatorias fijas.
+  - Flota leida desde `data/master/vehicles.csv` (IDs actuales `TRUCK-*`; filtra por `status` activo).
+  - En NiFi se evita sobrescritura de raw GPS: cada split se archiva con nombre unico (`${filename}_${fragment.index}_${UUID()}.jsonl`).
 
 ## Notas
 

@@ -98,10 +98,12 @@ Bootstrap automatico del flujo de ingesta:
 
 Estructura visual creada por defecto:
 
-- Process Group: `kdd_ingestion_auto_v8`
+- Process Group: `kdd_ingestion_auto_v9`
 - Subgrupos:
   - `gps_ingestion`
   - `weather_ingestion`
+- Archivado GPS:
+  - `SplitText` + `UpdateAttribute` + `PutFile` con filename unico por split (`${filename}_${fragment.index}_${UUID()}.jsonl`).
 
 Limpieza de grupos legacy (para dejar solo la version actual):
 
@@ -139,6 +141,7 @@ Rutas principales:
   - `/data/curated/enriched_events`
   - `/data/curated/delay_metrics_streaming`
   - `/data/curated/weather_observations_streaming`
+  - `/data/curated/enriched_events_streaming`
 
 Comprobacion de rutas y formatos:
 
@@ -207,10 +210,12 @@ Sanity check manual (equivalente al que ejecuta `start_kdd.sh`):
 ```bash
 docker compose exec -T spark-client spark-sql -e "
 SHOW TABLES IN transport_analytics LIKE 'delay_metrics_streaming';
+SHOW TABLES IN transport_analytics LIKE 'enriched_events_streaming';
 SHOW TABLES IN transport_analytics LIKE 'weather_observations_streaming';
 SHOW TABLES IN transport_analytics LIKE 'v_delay_metrics_streaming_madrid';
 SHOW TABLES IN transport_analytics LIKE 'v_weather_observations_madrid';
 SELECT COUNT(*) AS delay_rows FROM transport_analytics.v_delay_metrics_streaming_madrid;
+SELECT COUNT(*) AS enriched_stream_rows FROM transport_analytics.enriched_events_streaming;
 SELECT COUNT(*) AS weather_rows FROM transport_analytics.v_weather_observations_madrid;
 "
 ```
@@ -255,6 +260,7 @@ Tabla de referencia rapida para trazar cada flujo desde origen hasta consumo ana
 |---|---|---|---|---|
 | GPS raw | `gps-generator` -> NiFi (`nifi/input/*.jsonl`) | `transport.raw` | `/data/raw/nifi/gps/...` | No aplica (capa raw) |
 | GPS filtrado/normalizado | NiFi | `transport.filtered` | `/data/curated/delay_metrics_streaming` (fallback parquet streaming) | `transport_analytics.delay_metrics_streaming` |
+| GPS enriquecido streaming | Spark streaming | `transport.filtered` | `/data/curated/enriched_events_streaming` (fallback parquet streaming) | `transport_analytics.enriched_events_streaming` |
 | Weather raw | API Open-Meteo -> NiFi | `transport.weather.raw` | `/data/raw/nifi/weather/...` | No aplica (capa raw) |
 | Weather filtrado/normalizado | NiFi | `transport.weather.filtered` | `/data/curated/weather_observations_streaming` (fallback parquet streaming) | `transport_analytics.v_weather_observations_madrid` (vista operativa) |
 | Batch historico GPS | HDFS seed/raw (`/data/raw/gps_events.jsonl`) | No aplica | `/data/curated/enriched_events` | `transport_analytics.enriched_events`, `transport_analytics.delay_metrics_batch`, `transport_analytics.route_graph_metrics` |
@@ -351,7 +357,12 @@ Cambios aplicados en esta fecha:
 
 1. Healthchecks Airflow estabilizados frente a ausencia temporal de tablas streaming fuente.
 2. Historial rojo de healthchecks limpiado en Airflow.
-3. NiFi reorganizado por dominios (`gps_ingestion` y `weather_ingestion`) en `kdd_ingestion_auto_v8`.
+3. NiFi reorganizado por dominios (`gps_ingestion` y `weather_ingestion`) en `kdd_ingestion_auto_v9`.
+
+## Nota de tablas en tiempo real
+
+- `transport_analytics.enriched_events` es historico batch.
+- Para consultas en vivo de eventos enriquecidos usar `transport_analytics.enriched_events_streaming`.
 4. Process Group legacy eliminado para evitar ruido visual en la UI de NiFi.
 
 ## Operacion del dashboard (estado final)

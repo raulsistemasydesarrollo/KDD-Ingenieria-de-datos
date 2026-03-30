@@ -77,6 +77,7 @@ Archivo fuente del diagrama:
 4. `raw-hdfs-loader` mueve esos raw a HDFS: `/data/raw/nifi/gps/...`.
 5. Spark streaming consume `transport.filtered`, agrega ventanas y escribe:
    - `transport_analytics.delay_metrics_streaming` (Hive),
+   - `transport_analytics.enriched_events_streaming` (Hive),
    - fallback Parquet: `/data/curated/delay_metrics_streaming`.
 
 ### 3.2 Meteorologia
@@ -105,7 +106,7 @@ Archivo fuente del diagrama:
 
 Bootstrap actual (`scripts/bootstrap_nifi_flow.sh`) crea:
 
-- Process Group principal: `kdd_ingestion_auto_v8`
+- Process Group principal: `kdd_ingestion_auto_v9`
 - Subgrupos:
   - `gps_ingestion`
   - `weather_ingestion`
@@ -129,20 +130,22 @@ Esta separacion facilita mantenimiento y lectura en la UI.
    - `Line Split Count=1`.
 4. `extract_gps_fields` (`EvaluateJsonPath`)
    - extrae: `vehicle_id`, `warehouse_id`, `event_type`, `delay_minutes`.
-5. `route_gps_filtered` (`RouteOnAttribute`)
+5. `update_gps_archive_name` (`UpdateAttribute`)
+   - `filename = ${filename}_${fragment.index}_${UUID()}.jsonl`.
+6. `route_gps_filtered` (`RouteOnAttribute`)
    - regla `filtered`: `${delay_minutes:toNumber():ge(5)}`.
-6. `publish_gps_raw` (`PublishKafka`)
+7. `publish_gps_raw` (`PublishKafka`)
    - topic: `transport.raw`.
-7. `publish_gps_filtered` (`PublishKafka`)
+8. `publish_gps_filtered` (`PublishKafka`)
    - topic: `transport.filtered`.
-8. `archive_gps_raw_local` (`PutFile`)
+9. `archive_gps_raw_local` (`PutFile`)
    - dir: `/opt/nifi/nifi-current/raw-archive/gps`.
-9. `gps_failure_sink` (`PutFile`)
+10. `gps_failure_sink` (`PutFile`)
    - dir: `/opt/nifi/nifi-current/raw-archive/failures/gps`.
 
 Ruteo principal:
 
-- `matched` de `extract_gps_fields` va a raw Kafka y archivo local.
+- `matched` de `extract_gps_fields` pasa por `update_gps_archive_name` antes de archivado local (evita sobrescritura por split).
 - `filtered` de `route_gps_filtered` va a Kafka filtrado.
 - Errores y `unmatched` van a `gps_failure_sink`.
 
@@ -196,7 +199,8 @@ Caracteristicas:
 
 - Frecuencia: cada `15s`.
 - Factor temporal simulado: `SIM_TIME_FACTOR=6`.
-- 13 vehiculos (`V1..V13`), 1 evento por vehiculo en cada ciclo.
+- Flota cargada desde `data/master/vehicles.csv` (IDs actuales `TRUCK-*`, filtrando por `status` activo), 1 evento por vehiculo y ciclo.
+- Catalogo de rutas realistas calculado desde el grafo logistico y reasignacion dinamica al cerrar tramos.
 - Movimiento progresivo entre ciudades (sin salto directo idealizado).
 - Estado persistido en `.vehicle_path_state.json` para continuidad de trayectorias.
 
@@ -295,6 +299,7 @@ Pasos GPS streaming:
 6. Ventana de 15 min por `warehouse_id`.
 7. Escritura `foreachBatch` a Hive:
    - `transport_analytics.delay_metrics_streaming`.
+   - `transport_analytics.enriched_events_streaming`.
 8. Escritura de latest state por vehiculo a Cassandra.
 
 Pasos clima streaming:
@@ -310,6 +315,7 @@ Fallback robustez:
 
 - Si falla escritura Hive (incompatibilidad/metastore), guarda en Parquet fallback:
   - `/data/curated/delay_metrics_streaming`
+  - `/data/curated/enriched_events_streaming`
   - `/data/curated/weather_observations_streaming`
 
 Checkpoints:
@@ -365,6 +371,7 @@ Fallback heuristico (si dataset pequeno):
 ## 7.2 Tablas streaming
 
 - `transport_analytics.delay_metrics_streaming`
+- `transport_analytics.enriched_events_streaming`
 - (opcional segun entorno) `transport_analytics.weather_observations_streaming`
 
 ## 7.3 Vistas en hora Madrid
@@ -472,7 +479,7 @@ Script principal de arranque:
 - `scripts/start_kdd.sh`
   - levanta stack,
   - espera NiFi,
-  - ejecuta bootstrap NiFi (por defecto `kdd_ingestion_auto_v8`),
+  - ejecuta bootstrap NiFi (por defecto `kdd_ingestion_auto_v9`),
   - verifica dashboard.
 
 Reset de demo:

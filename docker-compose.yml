@@ -49,6 +49,8 @@ services:
     command: ["python", "/opt/generator/gps_generator.py"]
     volumes:
       - ./scripts/gps_generator.py:/opt/generator/gps_generator.py:ro
+      - ./data/graph:/opt/generator/data/graph:ro
+      - ./data/master:/opt/generator/data/master:ro
       - ./nifi/input:/out
 
   hadoop:

@@ -33,6 +33,8 @@
 
 1. Plataforma KDD end-to-end con NiFi, Kafka, Spark, Hive, Cassandra, Airflow y dashboard web.
 2. Ingesta separada por dominios (`gps_ingestion` y `weather_ingestion`) en NiFi.
+   - PG por defecto actual: `kdd_ingestion_auto_v9`.
+   - Archivado GPS sin sobrescritura por split (filename unico por evento).
 3. Dashboard con dos vistas desacopladas:
    - Tiempo Real con filtros propios (`Origen RT`, `Destino RT`).
    - Red Logistica con filtros propios (`Origen`, `Destino`, `Perfil`).
@@ -53,6 +55,8 @@
 - [ ] Topic Kafka GPS/Weather creados y activos.
 - [ ] Raw en HDFS presente (`/data/raw/nifi/...`).
 - [ ] Tablas Hive principales visibles en `transport_analytics`.
+- [ ] Tabla de eventos enriquecidos streaming visible y con datos:
+  - `transport_analytics.enriched_events_streaming`.
 - [ ] Cassandra con estado de flota y observaciones meteo recientes.
 
 ### 3.3 Dashboard

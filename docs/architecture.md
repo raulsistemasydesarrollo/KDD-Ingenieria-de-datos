@@ -41,11 +41,13 @@ Archivo de imagen:
 - `gps-generator`
   - Genera eventos GPS en `nifi/input/gps_*.jsonl`.
   - Mantiene estado de trayectos en `nifi/input/.vehicle_path_state.json`.
+  - Usa rutas realistas derivadas del grafo logistico y flota de `data/master/vehicles.csv`.
 
 - `NiFi 2.7.0`
-  - PG principal: `kdd_ingestion_auto_v8`.
+  - PG principal: `kdd_ingestion_auto_v9`.
   - Subgrupos: `gps_ingestion`, `weather_ingestion`.
   - Publica eventos a Kafka y archiva raw local (`raw-archive`).
+  - Evita sobrescrituras de GPS raw con renombrado unico por split (`filename + fragment.index + UUID`).
 
 - `Kafka 3.9.1`
   - Topics:
@@ -62,7 +64,7 @@ Archivo de imagen:
 - `Spark 3.5 + GraphFrames`
   - Batch: enriquecimiento, agregaciones, grafos, shortest paths y ML.
   - Streaming: GPS y clima desde Kafka con watermark + deduplicacion.
-  - Persistencia en Hive y Cassandra (con fallback Parquet curated).
+  - Persistencia en Hive y Cassandra (con fallback Parquet curated), incluyendo `transport_analytics.enriched_events_streaming`.
 
 - `Hive`
   - Almacen analitico SQL (`transport_analytics`).

@@ -12,6 +12,7 @@ Estado:
 
 - `[x]` Consumo desde API publica (Open-Meteo) en NiFi.
 - `[x]` Consumo de logs GPS simulados en NiFi (`gps-generator` -> `nifi/input`).
+- `[x]` Archivado GPS en NiFi sin sobrescrituras por split (nombre unico por evento).
 - `[x]` Publicacion en Kafka separando crudo/filtrado:
   - `transport.raw`
   - `transport.filtered`
@@ -26,6 +27,7 @@ Estado:
 - `[x]` Limpieza con Spark SQL (normalizacion, nulos, duplicados).
 - `[x]` Enriquecimiento batch con datos maestros.
 - `[x]` Enriquecimiento streaming con datos maestros en Hive (`master_warehouses`, `master_vehicles`).
+- `[x]` Persistencia de eventos enriquecidos en tiempo real en Hive (`transport_analytics.enriched_events_streaming`).
 - `[x]` Analisis de grafos con GraphFrames (PageRank + connected components).
 - `[x]` Camino mas corto/hops entre almacenes criticos (`transport_analytics.route_shortest_paths`).
 
@@ -35,6 +37,7 @@ Estado:
 - `[x]` Carga multicapa:
   - Hive (historico / reporting).
   - Cassandra (ultimo estado por vehiculo).
+- `[x]` Simulacion GPS realista sobre grafo logistico (rutas calculadas + reasignacion dinamica).
 - `[x]` Componente ML minimo implementado (modelo de riesgo de retraso con Spark ML y scoring en Hive).
 
 ## Fase IV: Orquestacion (Airflow)

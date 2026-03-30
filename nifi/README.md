@@ -11,9 +11,10 @@ En este proyecto se alimenta automaticamente con:
 
 Estado actual recomendado del bootstrap:
 
-- Process Group: `kdd_ingestion_auto_v8`
+- Process Group: `kdd_ingestion_auto_v9`
 - Subgrupos: `gps_ingestion`, `weather_ingestion`
 - Script: `./scripts/bootstrap_nifi_flow.sh`
+- Archivado GPS: nombre unico por split para evitar sobrescritura en `raw-archive/gps`.
 
 Documentacion relacionada:
 

@@ -8,15 +8,20 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ### Added
 
-- Sin cambios todavia.
+- Persistencia streaming en Hive de eventos enriquecidos: `transport_analytics.enriched_events_streaming`.
+- Nuevo fallback Parquet de streaming: `/data/curated/enriched_events_streaming`.
 
 ### Changed
 
-- Sin cambios todavia.
+- Generador GPS actualizado a rutas realistas sobre grafo logistico y flota actual leida desde `data/master/vehicles.csv`.
+- Bootstrap NiFi actualizado a `kdd_ingestion_auto_v9`.
+- Flujo GPS NiFi actualizado con renombrado unico por split (`${filename}_${fragment.index}_${UUID()}.jsonl`) para evitar sobrescrituras en `raw-archive/gps`.
+- Parseo de timestamps ISO UTC robusto en Spark streaming para GPS y clima.
+- Documentacion tecnica y operativa actualizada para reflejar el estado real de `v9` y las nuevas salidas streaming.
 
 ### Fixed
 
-- Sin cambios todavia.
+- Correccion de sobrescritura de ficheros GPS en `nifi/raw-archive/gps` al archivar flowfiles de `SplitText`.
 
 ### Removed
 

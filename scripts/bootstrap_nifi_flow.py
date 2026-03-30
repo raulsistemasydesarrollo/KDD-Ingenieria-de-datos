@@ -263,6 +263,9 @@ def main():
     p["eval_gps"] = create_processor(
         token, gps_pg_id, "extract_gps_fields", "org.apache.nifi.processors.standard.EvaluateJsonPath", 800, 120
     )
+    p["update_gps_archive_name"] = create_processor(
+        token, gps_pg_id, "update_gps_archive_name", "org.apache.nifi.processors.attributes.UpdateAttribute", 1040, -40
+    )
     p["route_gps"] = create_processor(
         token, gps_pg_id, "route_gps_filtered", "org.apache.nifi.processors.standard.RouteOnAttribute", 1040, 120
     )
@@ -329,6 +332,14 @@ def main():
             "warehouse_id": "$.warehouse_id",
             "event_type": "$.event_type",
             "delay_minutes": "$.delay_minutes",
+        },
+    )
+    update_processor(
+        token,
+        p["update_gps_archive_name"],
+        properties={
+            # SplitText conserva el nombre original; añadimos fragment/index + UUID para no pisar ficheros.
+            "filename": "${filename}_${fragment.index}_${UUID()}.jsonl",
         },
     )
     update_processor(token, p["route_gps"], properties={"filtered": "${delay_minutes:toNumber():ge(5)}"})
@@ -420,11 +431,13 @@ def main():
         (p["split_gps"], p["eval_gps"], ["splits"]),
         (p["eval_gps"], p["route_gps"], ["matched"]),
         (p["eval_gps"], p["kafka_raw"], ["matched"]),
-        (p["eval_gps"], p["archive_gps_raw"], ["matched"]),
+        (p["eval_gps"], p["update_gps_archive_name"], ["matched"]),
+        (p["update_gps_archive_name"], p["archive_gps_raw"], ["success"]),
         (p["route_gps"], p["kafka_filtered"], ["filtered"]),
         (p["fetch_gps"], p["gps_failure_sink"], ["failure", "not.found", "permission.denied"]),
         (p["split_gps"], p["gps_failure_sink"], ["failure"]),
         (p["eval_gps"], p["gps_failure_sink"], ["failure", "unmatched"]),
+        (p["update_gps_archive_name"], p["gps_failure_sink"], ["failure"]),
         (p["route_gps"], p["gps_failure_sink"], ["failure", "unmatched"]),
         (p["kafka_raw"], p["gps_failure_sink"], ["failure"]),
         (p["kafka_filtered"], p["gps_failure_sink"], ["failure"]),
@@ -450,6 +463,7 @@ def main():
         p["fetch_gps"],
         p["split_gps"],
         p["eval_gps"],
+        p["update_gps_archive_name"],
         p["route_gps"],
         p["kafka_raw"],
         p["archive_gps_raw"],

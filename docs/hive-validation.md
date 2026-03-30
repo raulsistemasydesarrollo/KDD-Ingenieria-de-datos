@@ -23,7 +23,7 @@ El script hace lo siguiente:
 8. Limpia tablas/checkpoints de streaming para evitar estado residual entre ejecuciones.
 9. Ejecuta streaming durante 240s (`STREAMING_STARTING_OFFSETS=earliest`).
 10. Inyecta eventos GPS y meteorologicos de prueba en Kafka en dos tandas con timestamps actuales.
-11. Verifica la salida streaming GPS en `transport_analytics.delay_metrics_streaming` y la salida meteo operativa en `transport_analytics.v_weather_observations_madrid`.
+11. Verifica la salida streaming GPS en `transport_analytics.delay_metrics_streaming`, la salida de eventos enriquecidos en `transport_analytics.enriched_events_streaming` y la salida meteo operativa en `transport_analytics.v_weather_observations_madrid`.
 
 ## Uso
 
@@ -53,8 +53,12 @@ La validacion es correcta cuando:
   - `transport_analytics.master_warehouses`
   - `transport_analytics.master_vehicles`
   - `transport_analytics.delay_metrics_streaming`
+  - `transport_analytics.enriched_events_streaming`
 - El resultado de:
   - `SELECT COUNT(*) FROM transport_analytics.delay_metrics_streaming;`
+  devuelve un valor mayor que `0`.
+- El resultado de:
+  - `SELECT COUNT(*) FROM transport_analytics.enriched_events_streaming;`
   devuelve un valor mayor que `0`.
 - El resultado de:
   - `SELECT COUNT(*) FROM transport_analytics.v_weather_observations_madrid;`

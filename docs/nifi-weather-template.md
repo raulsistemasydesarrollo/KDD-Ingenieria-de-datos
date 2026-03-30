@@ -28,7 +28,7 @@ Usar bootstrap en lugar de montarlo manualmente:
 ./scripts/bootstrap_nifi_flow.sh
 ```
 
-Por defecto crea el PG `kdd_ingestion_auto_v8` con subgrupo `weather_ingestion`.
+Por defecto crea el PG `kdd_ingestion_auto_v9` con subgrupo `weather_ingestion`.
 
 ## Flujo logico de procesadores
 

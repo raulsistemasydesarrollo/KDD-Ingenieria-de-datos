@@ -27,15 +27,18 @@ Crear una ingesta dual hacia Kafka y HDFS:
    - 1 linea por evento
 4. `EvaluateJsonPath`
    - extraer `vehicle_id`, `warehouse_id`, `event_type`, `delay_minutes`
-5. `RouteOnAttribute`
+5. `UpdateAttribute`
+   - `filename = ${filename}_${fragment.index}_${UUID()}.jsonl`
+   - objetivo: evitar sobrescritura en `raw-archive/gps` cuando `SplitText` genera multiples flowfiles desde un mismo archivo.
+6. `RouteOnAttribute`
    - `filtered`: `${delay_minutes:toNumber():ge(5)}`
-6. `PublishKafka` (NiFi 2.7 con `Kafka3ConnectionService`)
-   - Topic raw (todos los GPS): `transport.raw`
 7. `PublishKafka` (NiFi 2.7 con `Kafka3ConnectionService`)
+   - Topic raw (todos los GPS): `transport.raw`
+8. `PublishKafka` (NiFi 2.7 con `Kafka3ConnectionService`)
    - Topic filtered: `transport.filtered`
-8. `PutFile`
+9. `PutFile`
    - Directorio: `/opt/nifi/nifi-current/raw-archive/gps`
-9. `raw-hdfs-loader`
+10. `raw-hdfs-loader`
    - Sincroniza `nifi/raw-archive` -> HDFS `/data/raw/nifi`
 
 ## Recomendaciones
@@ -86,7 +89,7 @@ Sin configurar a mano la UI, puedes crear y arrancar el flujo con:
 ./scripts/bootstrap_nifi_flow.sh
 ```
 
-Este bootstrap crea el Process Group indicado por `NIFI_PG_NAME` (por defecto `kdd_ingestion_auto_v8`) con:
+Este bootstrap crea el Process Group indicado por `NIFI_PG_NAME` (por defecto `kdd_ingestion_auto_v9`) con:
 
 - GPS simulado -> `transport.raw` y `transport.filtered`
 - Meteo API publica -> `transport.weather.raw` y `transport.weather.filtered`

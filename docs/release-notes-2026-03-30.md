@@ -27,7 +27,10 @@ Se estabilizo la plataforma end-to-end para demo operativa en logistica:
 - Dashboard mas legible y accionable (mapa tiempo real + analisis de red).
 - Healthchecks de Airflow robustos y sin historico rojo pendiente.
 - NiFi reestructurado visualmente por dominios (`GPS` y `Clima`).
+- NiFi actualizado a `kdd_ingestion_auto_v9` con archivado GPS sin sobrescrituras.
 - Scripts de arranque/limpieza alineados para reproducibilidad.
+- Spark streaming ampliado con tabla de eventos enriquecidos en tiempo real (`transport_analytics.enriched_events_streaming`).
+- Generador GPS actualizado a rutas realistas sobre grafo logistico y flota actual (`TRUCK-*`).
 
 ## Dashboard web
 
@@ -111,7 +114,7 @@ Resultado:
 
 Se mejoro el bootstrap para crear una estructura separada por dominio:
 
-- PG principal: `kdd_ingestion_auto_v8`
+- PG principal: `kdd_ingestion_auto_v9`
 - Subgrupos:
   - `gps_ingestion`
   - `weather_ingestion`
@@ -137,7 +140,7 @@ Se elimino el Process Group legacy `kdd_ingestion_auto` tras:
 
 - `scripts/cleanup_nifi_legacy_pgs.py`
   - Limpia PGs legacy por prefijo.
-  - Mantiene un PG objetivo (por defecto `kdd_ingestion_auto_v8`).
+  - Mantiene un PG objetivo (por defecto `kdd_ingestion_auto_v9`).
   - Gestiona colas, controller services y borrado con reintentos.
 - `scripts/repopulate_hive_weather_from_cassandra.sh`
   - Exporta snapshots meteo desde Cassandra (`transport.weather_observations_recent`).
@@ -148,13 +151,23 @@ Se elimino el Process Group legacy `kdd_ingestion_auto` tras:
 
 - `scripts/bootstrap_nifi_flow.py`
   - crea subgrupos `gps_ingestion` y `weather_ingestion`,
+  - incorpora renombrado unico por split para archivado GPS (`${filename}_${fragment.index}_${UUID()}.jsonl`),
   - mantiene wiring y controller service Kafka.
+ 
+- `scripts/gps_generator.py`
+  - genera rutas realistas desde el grafo de ciudades (ya no etiquetas aleatorias fijas),
+  - carga flota desde `data/master/vehicles.csv`,
+  - permite reasignacion dinamica de ruta al cerrar tramos.
+
+- `spark-app/src/main/java/com/proyectobigdata/LogisticsAnalyticsJob.java`
+  - parseo robusto de timestamps ISO UTC para GPS y clima,
+  - nueva salida Hive `transport_analytics.enriched_events_streaming` en modo streaming.
 
 - `scripts/bootstrap_nifi_flow.sh`
-  - `NIFI_PG_NAME` por defecto: `kdd_ingestion_auto_v8`.
+  - `NIFI_PG_NAME` por defecto: `kdd_ingestion_auto_v9`.
 
 - `scripts/start_kdd.sh`
-  - exporta `NIFI_PG_NAME` por defecto a `kdd_ingestion_auto_v8` antes de bootstrap.
+  - exporta `NIFI_PG_NAME` por defecto a `kdd_ingestion_auto_v9` antes de bootstrap.
   - si `v_weather_observations_madrid` queda vacia, dispara repoblado desde Cassandra.
 
 ## Verificaciones recomendadas
@@ -174,7 +187,7 @@ GROUP BY dag_id;"
 
 Comprobar en UI/API que en root solo queda el PG activo esperado y sus subgrupos:
 
-- `kdd_ingestion_auto_v8`
+- `kdd_ingestion_auto_v9`
 - `gps_ingestion`
 - `weather_ingestion`
 

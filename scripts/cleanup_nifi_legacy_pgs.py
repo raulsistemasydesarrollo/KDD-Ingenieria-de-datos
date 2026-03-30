@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--user", default="admin", help="Usuario NiFi")
     p.add_argument("--password", default="adminadminadmin", help="Password NiFi")
     p.add_argument("--prefix", default="kdd_ingestion_auto", help="Prefijo de process groups gestionados")
-    p.add_argument("--keep", default="kdd_ingestion_auto_v8", help="Nombre del process group a conservar")
+    p.add_argument("--keep", default="kdd_ingestion_auto_v9", help="Nombre del process group a conservar")
     p.add_argument("--max-delete-retries", type=int, default=12, help="Reintentos maximos de borrado por PG")
     return p
 

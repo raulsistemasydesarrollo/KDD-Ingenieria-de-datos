@@ -13,18 +13,24 @@ Notas:
 - Diseñado para movimiento suave y sin saltos bruscos.
 """
 
+import csv
 import json
 import math
 import random
 import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 OUTPUT_DIR = Path("/out")
 STATE_FILE = OUTPUT_DIR / ".vehicle_path_state.json"
+GRAPH_EDGES_FILE = Path("/opt/generator/data/graph/edges.csv")
+MASTER_VEHICLES_FILE = Path("/opt/generator/data/master/vehicles.csv")
 SLEEP_SECONDS = 15
 SIM_TIME_FACTOR = 6  # 15s reales ~ 1.5 min simulados para movimiento suave.
+TARGET_ROUTE_COUNT = 20
+ROUTE_REASSIGN_PROBABILITY = 0.35
 
 CITY_COORDS = {
     "MAD": (40.4168, -3.7038),
@@ -40,43 +46,35 @@ CITY_COORDS = {
     "VLL": (41.6523, -4.7245),
 }
 WAREHOUSES = list(CITY_COORDS.keys())
-VEHICLES = [f"V{i}" for i in range(1, 14)]
+DEFAULT_VEHICLES = [f"V{i}" for i in range(1, 14)]
+VEHICLES = DEFAULT_VEHICLES[:]
 EVENTS_PER_FILE = len(VEHICLES)
 
-# Rutas logisticas realistas: cada una define un corredor fijo con hubs intermedios.
-ROUTE_CATALOG = {
-    "R1": {
-        "path": ["MAD", "VAL", "BCN"],
-        "cruise_speed_kmh": 78.0,
-        "dwell_cycles": (1, 2),
-        "weight": 0.24,
-    },
-    "R2": {
-        "path": ["MAD", "ZAR", "BCN"],
-        "cruise_speed_kmh": 74.0,
-        "dwell_cycles": (1, 2),
-        "weight": 0.21,
-    },
-    "R3": {
-        "path": ["SEV", "MAD", "VLL", "BIO", "ACO"],
-        "cruise_speed_kmh": 70.0,
-        "dwell_cycles": (1, 3),
-        "weight": 0.22,
-    },
-    "R4": {
-        "path": ["LIS", "OPO", "VLL", "MAD"],
-        "cruise_speed_kmh": 69.0,
-        "dwell_cycles": (1, 3),
-        "weight": 0.17,
-    },
-    "R5": {
-        "path": ["ALM", "VAL", "MAD", "SEV"],
-        "cruise_speed_kmh": 67.0,
-        "dwell_cycles": (1, 3),
-        "weight": 0.16,
-    },
-}
-ROUTES = list(ROUTE_CATALOG.keys())
+DEFAULT_GRAPH_EDGES = [
+    ("MAD", "BCN", 620.0, 9.0),
+    ("MAD", "VAL", 355.0, 5.0),
+    ("VAL", "BCN", 350.0, 6.0),
+    ("SEV", "MAD", 530.0, 11.0),
+    ("MAD", "ZAR", 320.0, 6.0),
+    ("ZAR", "BCN", 300.0, 5.0),
+    ("MAD", "LIS", 625.0, 12.0),
+    ("LIS", "OPO", 313.0, 7.0),
+    ("OPO", "MAD", 560.0, 10.0),
+    ("BIO", "MAD", 400.0, 8.0),
+    ("BIO", "ACO", 605.0, 9.0),
+    ("ACO", "MAD", 590.0, 10.0),
+    ("SEV", "ALM", 410.0, 9.0),
+    ("VAL", "ALM", 345.0, 7.0),
+    ("ALM", "MAD", 550.0, 11.0),
+    ("SEV", "LIS", 460.0, 9.0),
+    ("VAL", "ZAR", 310.0, 6.0),
+    ("VLL", "MAD", 210.0, 5.0),
+    ("VLL", "BIO", 280.0, 6.0),
+    ("VLL", "ACO", 450.0, 7.0),
+    ("VLL", "ZAR", 390.0, 6.0),
+]
+ROUTE_CATALOG = {}
+ROUTES = []
 
 
 def haversine_km(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
@@ -89,12 +87,266 @@ def haversine_km(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> floa
     return r * 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h))
 
 
-def choose_route_id() -> str:
-    weighted_ids = [(route_id, cfg["weight"]) for route_id, cfg in ROUTE_CATALOG.items()]
+def clamp(v: float, min_v: float, max_v: float) -> float:
+    return max(min_v, min(max_v, v))
+
+
+def _safe_float(value, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_int(value, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def load_graph_edges():
+    rows = []
+    if GRAPH_EDGES_FILE.exists():
+        try:
+            with GRAPH_EDGES_FILE.open("r", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                for item in reader:
+                    src = (item.get("src") or "").strip().upper()
+                    dst = (item.get("dst") or "").strip().upper()
+                    if src not in CITY_COORDS or dst not in CITY_COORDS or src == dst:
+                        continue
+                    rows.append(
+                        (
+                            src,
+                            dst,
+                            max(30.0, _safe_float(item.get("distance_km"), 80.0)),
+                            max(1.0, _safe_float(item.get("avg_delay_minutes"), 5.0)),
+                        )
+                    )
+        except OSError:
+            rows = []
+    if rows:
+        return rows
+    return DEFAULT_GRAPH_EDGES[:]
+
+
+def build_graph():
+    graph = defaultdict(dict)
+    for src, dst, distance_km, avg_delay in load_graph_edges():
+        graph[src][dst] = {"distance_km": distance_km, "avg_delay_minutes": avg_delay}
+        # Simetrico para modelar vias de doble sentido.
+        if src not in graph[dst]:
+            graph[dst][src] = {"distance_km": distance_km, "avg_delay_minutes": avg_delay}
+    return graph
+
+
+def shortest_path(graph, src: str, dst: str):
+    dist = {src: 0.0}
+    prev = {}
+    visited = set()
+    frontier = [(0.0, src)]
+    while frontier:
+        frontier.sort(key=lambda x: x[0])
+        current_cost, node = frontier.pop(0)
+        if node in visited:
+            continue
+        visited.add(node)
+        if node == dst:
+            break
+        for nxt, attrs in graph.get(node, {}).items():
+            if nxt in visited:
+                continue
+            edge_cost = float(attrs["distance_km"]) + float(attrs["avg_delay_minutes"]) * 9.0
+            candidate = current_cost + edge_cost
+            if candidate < dist.get(nxt, float("inf")):
+                dist[nxt] = candidate
+                prev[nxt] = node
+                frontier.append((candidate, nxt))
+    if dst not in prev and dst != src:
+        return None
+    path = [dst]
+    while path[-1] != src:
+        parent = prev.get(path[-1])
+        if parent is None:
+            return None
+        path.append(parent)
+    path.reverse()
+    return path
+
+
+def route_total_km(graph, path):
+    total = 0.0
+    for a, b in zip(path, path[1:]):
+        edge = graph.get(a, {}).get(b)
+        if edge:
+            total += float(edge["distance_km"])
+        else:
+            total += haversine_km(*CITY_COORDS[a], *CITY_COORDS[b])
+    return max(40.0, total)
+
+
+def _route_signature(path):
+    rev = tuple(reversed(path))
+    direct = tuple(path)
+    return min(direct, rev)
+
+
+def build_route_catalog():
+    graph = build_graph()
+    nodes = sorted(set(CITY_COORDS.keys()) & set(graph.keys()))
+    if len(nodes) < 2:
+        # Fallback minimo para no parar el generador.
+        return {
+            "R01": {
+                "path": ["MAD", "VAL", "BCN"],
+                "cruise_speed_kmh": 72.0,
+                "dwell_cycles": (1, 2),
+                "weight": 1.0,
+            }
+        }
+
+    node_degree = {n: len(graph.get(n, {})) for n in nodes}
+    candidates = []
+    seen = set()
+    for src in nodes:
+        for dst in nodes:
+            if src == dst:
+                continue
+            path = shortest_path(graph, src, dst)
+            if not path or len(path) < 2:
+                continue
+            signature = _route_signature(path)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            total_km = route_total_km(graph, path)
+            hops = max(1, len(path) - 1)
+            endpoint_demand = node_degree.get(path[0], 1) + node_degree.get(path[-1], 1)
+            centrality = sum(node_degree.get(p, 1) for p in path) / len(path)
+            score = (endpoint_demand * 1.8) + (centrality * 1.2) + (hops * 0.9) + (total_km / 240.0)
+            candidates.append(
+                {
+                    "path": path,
+                    "total_km": total_km,
+                    "score": score,
+                    "hops": hops,
+                    "endpoint_demand": endpoint_demand,
+                }
+            )
+
+    candidates.sort(key=lambda c: (-c["score"], -c["hops"], c["total_km"], tuple(c["path"])))
+    target = max(6, min(TARGET_ROUTE_COUNT, len(candidates)))
+    multi_hop = [c for c in candidates if c["hops"] >= 2]
+    one_hop = [c for c in candidates if c["hops"] == 1]
+
+    selected = []
+    target_multi = min(len(multi_hop), max(4, int(target * 0.65)))
+    selected.extend(multi_hop[:target_multi])
+    if len(selected) < target:
+        selected.extend(one_hop[: target - len(selected)])
+    if len(selected) < target:
+        missing = target - len(selected)
+        leftovers = [c for c in candidates if c not in selected]
+        selected.extend(leftovers[:missing])
+    if not selected:
+        selected = [{"path": ["MAD", "VAL"], "total_km": 355.0, "score": 1.0, "hops": 1, "endpoint_demand": 2.0}]
+
+    raw_weights = []
+    catalog = {}
+    for idx, item in enumerate(selected, start=1):
+        path = item["path"]
+        total_km = item["total_km"]
+        hops = item["hops"]
+        avg_leg_km = total_km / max(1, hops)
+        cruise = clamp(61.0 + min(16.0, avg_leg_km / 25.0), 60.0, 82.0)
+        dwell_min = 1
+        dwell_max = 3 if len(path) >= 4 else 2
+        weight = max(0.15, item["score"])
+        route_id = f"R{idx:02d}"
+        raw_weights.append(weight)
+        catalog[route_id] = {
+            "path": path,
+            "cruise_speed_kmh": round(cruise, 1),
+            "dwell_cycles": (dwell_min, dwell_max),
+            "weight": weight,
+        }
+
+    total_weight = sum(raw_weights) or 1.0
+    for cfg in catalog.values():
+        cfg["weight"] = cfg["weight"] / total_weight
+    return catalog
+
+
+def initialize_route_catalog():
+    global ROUTE_CATALOG, ROUTES
+    ROUTE_CATALOG = build_route_catalog()
+    ROUTES = sorted(ROUTE_CATALOG.keys())
+
+
+def load_vehicle_fleet():
+    candidates = [
+        MASTER_VEHICLES_FILE,
+        Path(__file__).resolve().parents[1] / "data" / "master" / "vehicles.csv",
+    ]
+    selected = []
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                for item in reader:
+                    vehicle_id = (item.get("vehicle_id") or "").strip()
+                    status = (item.get("status") or "active").strip().lower()
+                    if not vehicle_id:
+                        continue
+                    selected.append((vehicle_id, status))
+        except OSError:
+            continue
+        if selected:
+            break
+
+    if not selected:
+        return DEFAULT_VEHICLES[:]
+
+    active = [vehicle_id for vehicle_id, status in selected if status not in {"maintenance", "inactive", "retired"}]
+    if active:
+        return active
+    fallback = [vehicle_id for vehicle_id, _ in selected]
+    return fallback if fallback else DEFAULT_VEHICLES[:]
+
+
+def initialize_vehicle_fleet():
+    global VEHICLES, EVENTS_PER_FILE
+    VEHICLES = load_vehicle_fleet()
+    EVENTS_PER_FILE = len(VEHICLES)
+
+
+def initialize_runtime():
+    initialize_route_catalog()
+    initialize_vehicle_fleet()
+
+
+def choose_route_id(preferred_node: str | None = None, exclude_route_id: str | None = None) -> str:
+    if not ROUTE_CATALOG:
+        initialize_runtime()
+    weighted_ids = []
+    for route_id, cfg in ROUTE_CATALOG.items():
+        if exclude_route_id and route_id == exclude_route_id:
+            continue
+        path = cfg["path"]
+        if preferred_node and preferred_node not in path:
+            continue
+        weighted_ids.append((route_id, cfg["weight"]))
+    if not weighted_ids:
+        weighted_ids = [(route_id, cfg["weight"]) for route_id, cfg in ROUTE_CATALOG.items()]
     return random.choices([r for r, _ in weighted_ids], weights=[w for _, w in weighted_ids], k=1)[0]
 
 
 def current_segment_nodes(path_state: dict) -> tuple[str, str]:
+    if not ROUTE_CATALOG:
+        initialize_runtime()
     route_cfg = ROUTE_CATALOG[path_state["route_id"]]
     path = route_cfg["path"]
     idx = int(path_state["segment_index"])
@@ -104,16 +356,23 @@ def current_segment_nodes(path_state: dict) -> tuple[str, str]:
     return path[idx + 1], path[idx]
 
 
-def seed_state_for_route(route_id: str) -> dict:
+def seed_state_for_route(route_id: str, preferred_node: str | None = None) -> dict:
     route_cfg = ROUTE_CATALOG[route_id]
     path = route_cfg["path"]
     direction = random.choice([1, -1])
-    if len(path) <= 1:
-        segment_index = 0
-    elif direction >= 0:
-        segment_index = random.randrange(0, len(path) - 1)
-    else:
-        segment_index = random.randrange(0, len(path) - 1)
+    segment_index = 0
+    if len(path) > 1:
+        anchored = []
+        if preferred_node:
+            for idx in range(0, len(path) - 1):
+                if path[idx] == preferred_node:
+                    anchored.append((idx, 1))
+                if path[idx + 1] == preferred_node:
+                    anchored.append((idx, -1))
+        if anchored:
+            segment_index, direction = random.choice(anchored)
+        else:
+            segment_index = random.randrange(0, len(path) - 1)
     origin, destination = (
         (path[segment_index], path[segment_index + 1]) if direction >= 0 else (path[segment_index + 1], path[segment_index])
     )
@@ -131,21 +390,24 @@ def seed_state_for_route(route_id: str) -> dict:
 
 def init_vehicle_path_state():
     state = {}
-    for vehicle_id in VEHICLES:
-        state[vehicle_id] = seed_state_for_route(choose_route_id())
+    seed_routes = ROUTES[:]
+    random.shuffle(seed_routes)
+    for idx, vehicle_id in enumerate(VEHICLES):
+        route_id = seed_routes[idx] if idx < len(seed_routes) else choose_route_id()
+        state[vehicle_id] = seed_state_for_route(route_id)
     return state
 
 
-def clamp(v: float, min_v: float, max_v: float) -> float:
-    return max(min_v, min(max_v, v))
-
-
-def _safe_int(value, fallback: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return fallback
-
+def maybe_reassign_route(path_state: dict, anchor_node: str) -> bool:
+    if random.random() >= ROUTE_REASSIGN_PROBABILITY:
+        return False
+    current_route_id = path_state.get("route_id")
+    next_route_id = choose_route_id(preferred_node=anchor_node, exclude_route_id=current_route_id)
+    if next_route_id == current_route_id:
+        return False
+    reassigned = seed_state_for_route(next_route_id, preferred_node=anchor_node)
+    path_state.update(reassigned)
+    return True
 
 def load_vehicle_path_state():
     if not STATE_FILE.exists():
@@ -209,11 +471,15 @@ def _advance_segment(path_state: dict) -> None:
         if idx < last_segment:
             idx += 1
         else:
+            if maybe_reassign_route(path_state, path[-1]):
+                return
             direction = -1
     else:
         if idx > 0:
             idx -= 1
         else:
+            if maybe_reassign_route(path_state, path[0]):
+                return
             direction = 1
 
     path_state["direction"] = direction
@@ -315,6 +581,7 @@ def build_event(counter: int, vehicle_id: str) -> dict:
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    initialize_runtime()
     global VEHICLE_PATH_STATE
     VEHICLE_PATH_STATE = load_vehicle_path_state()
     counter = int(time.time())
@@ -335,6 +602,9 @@ def main() -> None:
         save_vehicle_path_state(VEHICLE_PATH_STATE)
         print(f"Generado {file_path.name} con {EVENTS_PER_FILE} eventos")
         time.sleep(SLEEP_SECONDS)
+
+
+initialize_runtime()
 
 
 if __name__ == "__main__":
