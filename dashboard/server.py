@@ -52,7 +52,12 @@ CASSANDRA_PORT = int(os.getenv("CASSANDRA_PORT", "9042"))
 CASSANDRA_KEYSPACE = os.getenv("CASSANDRA_KEYSPACE", "transport")
 CASSANDRA_TABLE = os.getenv("CASSANDRA_TABLE", "vehicle_latest_state")
 CASSANDRA_WEATHER_TABLE = os.getenv("CASSANDRA_WEATHER_TABLE", "weather_observations_recent")
+CASSANDRA_INSIGHTS_TABLE = os.getenv("CASSANDRA_INSIGHTS_TABLE", "network_insights_snapshots")
 VEHICLE_FRESHNESS_SECONDS = int(os.getenv("VEHICLE_FRESHNESS_SECONDS", "900"))
+LIVE_EDGE_BLEND_MAX = float(os.getenv("LIVE_EDGE_BLEND_MAX", "0.65"))
+LIVE_EDGE_MIN_SAMPLES = int(os.getenv("LIVE_EDGE_MIN_SAMPLES", "1"))
+INSIGHTS_PERSIST_INTERVAL_SECONDS = int(os.getenv("INSIGHTS_PERSIST_INTERVAL_SECONDS", "60"))
+_INSIGHTS_LAST_PERSIST = {}
 
 
 def parse_iso_utc(value: str):
@@ -341,7 +346,7 @@ def edge_weight(edge, profile: str, weather_factor: float):
     # Calcula coste de arista para routing segun perfil y clima.
     # Retorna (total, base, penalizacion_meteo).
     distance = edge["distance_km"]
-    delay = edge["avg_delay_minutes"]
+    delay = float(edge.get("effective_avg_delay_minutes", edge.get("avg_delay_minutes", 0.0)))
 
     if profile == "fastest":
         base = (distance / 88.0) * 60.0 + (delay * 0.9)
@@ -451,6 +456,268 @@ def dijkstra(vertices, edges, source, target, profile, weather_factor):
         "weather_impact_level": weather_impact_level(weather_factor),
         "route_weather_factor": round(effective_weather_factor, 3),
         "route_weather_impact_level": weather_impact_level(effective_weather_factor),
+    }
+
+
+def _edge_key(src: str, dst: str):
+    if src <= dst:
+        return src, dst
+    return dst, src
+
+
+def _congestion_level(avg_delay: float, avg_speed: float, sample_count: int):
+    if sample_count <= 0:
+        return "unknown"
+    if avg_delay >= 14.0 or avg_speed <= 38.0:
+        return "high"
+    if avg_delay >= 8.0 or avg_speed <= 54.0:
+        return "medium"
+    return "low"
+
+
+def apply_live_edge_telemetry(edges, latest_rows):
+    # Mezcla delay estatico por tramo con telemetria reciente de flota.
+    # Solo se consideran vehiculos con planned_origin/planned_destination.
+    if not edges:
+        return edges, {"vehicles_considered": 0, "live_samples": 0, "edges_with_live_samples": 0}
+
+    stats = {}
+    vehicles_considered = 0
+    total_samples = 0
+
+    for row in latest_rows or []:
+        origin = row.get("planned_origin")
+        destination = row.get("planned_destination")
+        if not origin or not destination or origin == destination:
+            continue
+        vehicles_considered += 1
+        key = _edge_key(str(origin), str(destination))
+        bucket = stats.setdefault(
+            key,
+            {
+                "sample_count": 0,
+                "delay_sum": 0.0,
+                "speed_sum": 0.0,
+            },
+        )
+        bucket["sample_count"] += 1
+        bucket["delay_sum"] += float(row.get("delay_minutes") or 0.0)
+        bucket["speed_sum"] += float(row.get("speed_kmh") or 0.0)
+        total_samples += 1
+
+    enriched = []
+    edges_with_live_samples = 0
+    for edge in edges:
+        src = str(edge.get("src") or "")
+        dst = str(edge.get("dst") or "")
+        key = _edge_key(src, dst)
+        edge_stats = stats.get(key)
+        static_delay = float(edge.get("avg_delay_minutes") or 0.0)
+
+        if edge_stats and edge_stats["sample_count"] >= LIVE_EDGE_MIN_SAMPLES:
+            sample_count = int(edge_stats["sample_count"])
+            live_avg_delay = edge_stats["delay_sum"] / sample_count
+            live_avg_speed = edge_stats["speed_sum"] / sample_count if sample_count > 0 else 0.0
+            blend = min(LIVE_EDGE_BLEND_MAX, LIVE_EDGE_BLEND_MAX * min(sample_count / 3.0, 1.0))
+            effective_delay = (static_delay * (1.0 - blend)) + (live_avg_delay * blend)
+            congestion = _congestion_level(live_avg_delay, live_avg_speed, sample_count)
+            edges_with_live_samples += 1
+            enriched.append(
+                {
+                    **edge,
+                    "effective_avg_delay_minutes": round(effective_delay, 2),
+                    "live_avg_delay_minutes": round(live_avg_delay, 2),
+                    "live_avg_speed_kmh": round(live_avg_speed, 2),
+                    "live_sample_count": sample_count,
+                    "congestion_level": congestion,
+                }
+            )
+        else:
+            enriched.append(
+                {
+                    **edge,
+                    "effective_avg_delay_minutes": round(static_delay, 2),
+                    "live_avg_delay_minutes": None,
+                    "live_avg_speed_kmh": None,
+                    "live_sample_count": 0,
+                    "congestion_level": "unknown",
+                }
+            )
+
+    summary = {
+        "vehicles_considered": vehicles_considered,
+        "live_samples": total_samples,
+        "edges_with_live_samples": edges_with_live_samples,
+    }
+    return enriched, summary
+
+
+def _criticality_weight(value: str):
+    normalized = str(value or "").strip().lower()
+    if normalized == "high":
+        return 1.35
+    if normalized == "medium":
+        return 1.1
+    return 1.0
+
+
+def _congestion_rank(level: str):
+    value = str(level or "unknown").lower()
+    if value == "high":
+        return 3
+    if value == "medium":
+        return 2
+    if value == "low":
+        return 1
+    return 0
+
+
+def _resolved_congestion_level(raw_level: str, effective_delay: float, total_minutes: float):
+    normalized = str(raw_level or "unknown").strip().lower()
+    if normalized in {"low", "medium", "high"}:
+        return normalized
+    # Fallback cuando no hay muestra live: estimacion por severidad operativa del tramo.
+    if effective_delay >= 12.0 or total_minutes >= 300.0:
+        return "high"
+    if effective_delay >= 7.0 or total_minutes >= 180.0:
+        return "medium"
+    return "low"
+
+
+def compute_network_insights(vertices, edges, profile="balanced", min_congestion="all", weather_factor=0.0):
+    # Extrae rankings accionables para dashboard operacional.
+    # 1) Cuellos de botella por tramo.
+    # 2) Nodos criticos por centralidad operativa simple.
+    if not vertices or not edges:
+        return {"top_bottlenecks": [], "top_critical_nodes": []}
+
+    vertex_index = {str(v.get("id") or ""): v for v in vertices}
+    node_stats = {
+        node_id: {
+            "degree": 0,
+            "incident_delay_sum": 0.0,
+            "incident_distance_sum": 0.0,
+            "high_congestion_edges": 0,
+            "live_edges": 0,
+            "total_edges": 0,
+            "profile_minutes_sum": 0.0,
+        }
+        for node_id in vertex_index.keys()
+    }
+
+    bottlenecks = []
+    min_rank = 0 if str(min_congestion or "all").lower() in {"all", "any"} else _congestion_rank(min_congestion)
+
+    for edge in edges:
+        src = str(edge.get("src") or "")
+        dst = str(edge.get("dst") or "")
+        if not src or not dst:
+            continue
+        distance = float(edge.get("distance_km") or 0.0)
+        effective_delay = float(edge.get("effective_avg_delay_minutes", edge.get("avg_delay_minutes") or 0.0))
+        live_samples = int(edge.get("live_sample_count") or 0)
+        raw_congestion = str(edge.get("congestion_level") or "unknown")
+        total_minutes, base_minutes, weather_penalty = edge_weight(edge, profile, weather_factor)
+        congestion = _resolved_congestion_level(raw_congestion, effective_delay, total_minutes)
+        if _congestion_rank(congestion) < min_rank:
+            continue
+        congestion_multiplier = 1.0
+        if congestion == "high":
+            congestion_multiplier = 1.45
+        elif congestion == "medium":
+            congestion_multiplier = 1.2
+        elif congestion == "low":
+            congestion_multiplier = 1.05
+        live_multiplier = 1.0 + min(0.35, live_samples * 0.07)
+        distance_multiplier = 1.0 + min(0.65, distance / 750.0)
+        profile_multiplier = 1.0
+        if profile == "fastest":
+            profile_multiplier = 1.08
+        elif profile == "resilient":
+            profile_multiplier = 0.94
+        impact_score = total_minutes * congestion_multiplier * live_multiplier * distance_multiplier * profile_multiplier
+
+        bottlenecks.append(
+            {
+                "src": src,
+                "dst": dst,
+                "distance_km": round(distance, 2),
+                "effective_avg_delay_minutes": round(effective_delay, 2),
+                "base_minutes": round(base_minutes, 2),
+                "weather_penalty_minutes": round(weather_penalty, 2),
+                "total_minutes": round(total_minutes, 2),
+                "live_sample_count": live_samples,
+                "congestion_level": congestion,
+                "impact_score": round(impact_score, 3),
+            }
+        )
+
+        for node_id in (src, dst):
+            if node_id not in node_stats:
+                node_stats[node_id] = {
+                    "degree": 0,
+                    "incident_delay_sum": 0.0,
+                    "incident_distance_sum": 0.0,
+                    "high_congestion_edges": 0,
+                    "live_edges": 0,
+                    "total_edges": 0,
+                    "profile_minutes_sum": 0.0,
+                }
+            node_stats[node_id]["degree"] += 1
+            node_stats[node_id]["incident_delay_sum"] += effective_delay
+            node_stats[node_id]["incident_distance_sum"] += distance
+            node_stats[node_id]["total_edges"] += 1
+            node_stats[node_id]["profile_minutes_sum"] += float(total_minutes)
+            if live_samples > 0:
+                node_stats[node_id]["live_edges"] += 1
+            if congestion == "high":
+                node_stats[node_id]["high_congestion_edges"] += 1
+
+    bottlenecks.sort(key=lambda e: (e["impact_score"], e["effective_avg_delay_minutes"]), reverse=True)
+
+    critical_nodes = []
+    for node_id, stats in node_stats.items():
+        total_edges = max(1, int(stats["total_edges"]))
+        avg_incident_delay = stats["incident_delay_sum"] / total_edges
+        avg_incident_distance = stats["incident_distance_sum"] / total_edges
+        avg_profile_minutes = stats["profile_minutes_sum"] / total_edges
+        high_ratio = stats["high_congestion_edges"] / total_edges
+        live_ratio = stats["live_edges"] / total_edges
+        node_meta = vertex_index.get(node_id, {})
+        node_criticality = str(node_meta.get("criticality") or "unknown")
+        criticality_score = (
+            (stats["degree"] * 1.3)
+            + (avg_incident_delay * 0.9)
+            + (avg_profile_minutes * 0.18)
+            + (avg_incident_distance / 160.0)
+            + (high_ratio * 5.0)
+            + (live_ratio * 1.8)
+        ) * _criticality_weight(node_criticality)
+        critical_nodes.append(
+            {
+                "id": node_id,
+                "name": node_meta.get("name") or node_meta.get("warehouse_name") or node_id,
+                "criticality": node_criticality,
+                "degree": int(stats["degree"]),
+                "avg_incident_delay_minutes": round(avg_incident_delay, 2),
+                "avg_profile_minutes": round(avg_profile_minutes, 2),
+                "high_congestion_ratio": round(high_ratio, 3),
+                "live_coverage_ratio": round(live_ratio, 3),
+                "criticality_score": round(criticality_score, 3),
+            }
+        )
+
+    critical_nodes.sort(
+        key=lambda n: (n["criticality_score"], n["avg_incident_delay_minutes"], n["degree"]),
+        reverse=True,
+    )
+    return {
+        "top_bottlenecks": bottlenecks[:8],
+        "top_critical_nodes": critical_nodes[:8],
+        "filters": {
+            "profile": profile,
+            "min_congestion": min_congestion,
+        },
     }
 
 
@@ -766,6 +1033,217 @@ def sync_weather_to_cassandra(rows):
             pass
 
 
+def _insights_partition_bucket(now_utc: datetime):
+    return now_utc.strftime("%Y%m%d")
+
+
+def _should_persist_insights(profile: str, min_congestion: str, now_utc: datetime):
+    key = f"{profile}:{min_congestion}"
+    last = _INSIGHTS_LAST_PERSIST.get(key)
+    if last is None:
+        _INSIGHTS_LAST_PERSIST[key] = now_utc
+        return True
+    if (now_utc - last).total_seconds() >= INSIGHTS_PERSIST_INTERVAL_SECONDS:
+        _INSIGHTS_LAST_PERSIST[key] = now_utc
+        return True
+    return False
+
+
+def persist_network_insights_snapshot(network_insights):
+    # Persistencia best-effort del ranking live para analisis historico.
+    meta = {"status": "noop", "written": 0, "error": None}
+    if Cluster is None:
+        meta["status"] = "driver_missing"
+        return meta
+    if not network_insights:
+        return meta
+
+    filters = network_insights.get("filters") or {}
+    profile = str(filters.get("profile") or "balanced")
+    min_congestion = str(filters.get("min_congestion") or "all")
+    now_utc = datetime.now(timezone.utc)
+    if not _should_persist_insights(profile, min_congestion, now_utc):
+        meta["status"] = "throttled"
+        return meta
+
+    bottlenecks = network_insights.get("top_bottlenecks") or []
+    critical_nodes = network_insights.get("top_critical_nodes") or []
+    if not bottlenecks and not critical_nodes:
+        return meta
+
+    bucket = _insights_partition_bucket(now_utc)
+    cluster = None
+    session = None
+    try:
+        cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
+        session = cluster.connect()
+        session.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{CASSANDRA_INSIGHTS_TABLE} (
+                bucket text,
+                entity_type text,
+                profile text,
+                min_congestion text,
+                snapshot_time timestamp,
+                rank int,
+                entity_id text,
+                impact_score double,
+                criticality_score double,
+                effective_avg_delay_minutes double,
+                total_minutes double,
+                congestion_level text,
+                live_sample_count int,
+                PRIMARY KEY ((bucket, entity_type, profile, min_congestion), snapshot_time, rank, entity_id)
+            ) WITH CLUSTERING ORDER BY (snapshot_time DESC, rank ASC, entity_id ASC)
+            """
+        )
+        stmt = (
+            f"INSERT INTO {CASSANDRA_KEYSPACE}.{CASSANDRA_INSIGHTS_TABLE} "
+            f"(bucket, entity_type, profile, min_congestion, snapshot_time, rank, entity_id, impact_score, "
+            f"criticality_score, effective_avg_delay_minutes, total_minutes, congestion_level, live_sample_count) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        )
+        written = 0
+        for idx, edge in enumerate(bottlenecks, start=1):
+            entity_id = f"{edge.get('src')}->{edge.get('dst')}"
+            session.execute(
+                stmt,
+                (
+                    bucket,
+                    "edge",
+                    profile,
+                    min_congestion,
+                    now_utc,
+                    idx,
+                    entity_id,
+                    float(edge.get("impact_score") or 0.0),
+                    None,
+                    float(edge.get("effective_avg_delay_minutes") or 0.0),
+                    float(edge.get("total_minutes") or 0.0),
+                    str(edge.get("congestion_level") or "unknown"),
+                    int(edge.get("live_sample_count") or 0),
+                ),
+            )
+            written += 1
+        for idx, node in enumerate(critical_nodes, start=1):
+            entity_id = str(node.get("id") or f"node_{idx}")
+            session.execute(
+                stmt,
+                (
+                    bucket,
+                    "node",
+                    profile,
+                    min_congestion,
+                    now_utc,
+                    idx,
+                    entity_id,
+                    None,
+                    float(node.get("criticality_score") or 0.0),
+                    float(node.get("avg_incident_delay_minutes") or 0.0),
+                    float(node.get("avg_profile_minutes") or 0.0),
+                    str(node.get("criticality") or "unknown"),
+                    0,
+                ),
+            )
+            written += 1
+        meta["status"] = "ok"
+        meta["written"] = written
+        return meta
+    except Exception as exc:
+        meta["status"] = "error"
+        meta["error"] = str(exc)
+        return meta
+    finally:
+        try:
+            session.shutdown()
+        except Exception:
+            pass
+        try:
+            cluster.shutdown()
+        except Exception:
+            pass
+
+
+def load_network_insights_history(profile="balanced", min_congestion="all", snapshots=10):
+    meta = {"status": "unknown", "error": None}
+    if Cluster is None:
+        return {"items": [], "meta": {"status": "driver_missing", "error": "cassandra-driver no disponible"}}
+    snapshots = max(1, min(int(snapshots or 10), 48))
+    today = datetime.now(timezone.utc)
+    buckets = [
+        _insights_partition_bucket(today),
+        _insights_partition_bucket(today - timedelta(days=1)),
+    ]
+    cluster = None
+    session = None
+    try:
+        cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
+        session = cluster.connect()
+        query = (
+            f"SELECT snapshot_time, entity_type, rank, entity_id, impact_score, criticality_score, "
+            f"effective_avg_delay_minutes, total_minutes, congestion_level, live_sample_count "
+            f"FROM {CASSANDRA_KEYSPACE}.{CASSANDRA_INSIGHTS_TABLE} "
+            f"WHERE bucket=%s AND entity_type=%s AND profile=%s AND min_congestion=%s LIMIT %s"
+        )
+        rows = []
+        fetch_limit = max(80, snapshots * 12)
+        for bucket in buckets:
+            for entity_type in ("edge", "node"):
+                part = session.execute(query, [bucket, entity_type, profile, min_congestion, fetch_limit])
+                rows.extend(list(part))
+
+        grouped = {}
+        for row in rows:
+            ts = getattr(row, "snapshot_time", None)
+            if ts is None:
+                continue
+            ts_key = to_iso(ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc))
+            entity_type = str(getattr(row, "entity_type", "") or "")
+            rank = int(getattr(row, "rank", 0) or 0)
+            if rank != 1:
+                continue
+            item = grouped.setdefault(
+                ts_key,
+                {
+                    "snapshot_time": ts_key,
+                    "top_bottleneck": None,
+                    "top_node": None,
+                },
+            )
+            if entity_type == "edge":
+                item["top_bottleneck"] = {
+                    "entity_id": getattr(row, "entity_id", None),
+                    "impact_score": float(getattr(row, "impact_score", 0.0) or 0.0),
+                    "effective_avg_delay_minutes": float(getattr(row, "effective_avg_delay_minutes", 0.0) or 0.0),
+                    "total_minutes": float(getattr(row, "total_minutes", 0.0) or 0.0),
+                    "congestion_level": getattr(row, "congestion_level", None),
+                    "live_sample_count": int(getattr(row, "live_sample_count", 0) or 0),
+                }
+            if entity_type == "node":
+                item["top_node"] = {
+                    "entity_id": getattr(row, "entity_id", None),
+                    "criticality_score": float(getattr(row, "criticality_score", 0.0) or 0.0),
+                    "avg_incident_delay_minutes": float(getattr(row, "effective_avg_delay_minutes", 0.0) or 0.0),
+                    "avg_profile_minutes": float(getattr(row, "total_minutes", 0.0) or 0.0),
+                }
+        items = sorted(grouped.values(), key=lambda x: x["snapshot_time"], reverse=True)[:snapshots]
+        meta["status"] = "ok"
+        return {"items": items, "meta": meta}
+    except Exception as exc:
+        meta["status"] = "error"
+        meta["error"] = str(exc)
+        return {"items": [], "meta": meta}
+    finally:
+        try:
+            session.shutdown()
+        except Exception:
+            pass
+        try:
+            cluster.shutdown()
+        except Exception:
+            pass
+
+
 def load_vehicle_latest_from_cassandra_with_meta(limit: int = 200):
     meta = {
         "enabled": Cluster is not None,
@@ -976,23 +1454,35 @@ class DashboardHandler(BaseHTTPRequestHandler):
         vertices_with_coords = enrich_vertices_with_coords(vertices, wh_index)
         warehouse_aliases = build_warehouse_aliases(vertices)
         vehicle_plans = load_vehicle_path_plans(warehouse_aliases)
+        latest_rows_for_network, latest_source_for_network, _latest_meta = load_vehicle_latest_preferred(
+            events, warehouse_aliases, limit=200
+        )
+        attach_vehicle_plans(latest_rows_for_network, vehicle_plans)
+        edges_with_live, live_edge_summary = apply_live_edge_telemetry(edges, latest_rows_for_network)
+        insights_profile = (query.get("insights_profile") or ["balanced"])[0]
+        insights_min_congestion = (query.get("insights_min_congestion") or ["all"])[0]
+        network_insights = compute_network_insights(
+            vertices_with_coords,
+            edges_with_live,
+            profile=insights_profile,
+            min_congestion=insights_min_congestion,
+            weather_factor=weather_factor,
+        )
 
         if path == "/api/overview":
             # KPIs globales + metadatos de fuentes activas.
-            latest_rows, vehicle_source, _vehicle_meta = load_vehicle_latest_preferred(
-                events, warehouse_aliases, limit=200
-            )
             overview = (
-                build_overview_from_latest_vehicle_state(latest_rows, weather_rows)
-                if latest_rows and vehicle_source == "cassandra"
+                build_overview_from_latest_vehicle_state(latest_rows_for_network, weather_rows)
+                if latest_rows_for_network and latest_source_for_network == "cassandra"
                 else build_overview(events, weather_rows)
             )
             self._json({
                 "overview": overview,
                 "warehouses": warehouses,
                 "warehouse_aliases": warehouse_aliases,
-                "vehicle_source": vehicle_source,
+                "vehicle_source": latest_source_for_network,
                 "weather_source": weather_source,
+                "live_edge_summary": live_edge_summary,
             })
             return
 
@@ -1008,6 +1498,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             latest_cassandra, cassandra_meta = load_vehicle_latest_from_cassandra_with_meta(limit=200)
             latest_files = list_latest_files(GPS_DIR, "gps_*.jsonl", 1)
             latest_weather_files = list_latest_files(WEATHER_DIR, "*", 5)
+            history_meta = load_network_insights_history(
+                profile=insights_profile,
+                min_congestion=insights_min_congestion,
+                snapshots=3,
+            ).get("meta", {})
             self._json(
                 {
                     "vehicles": {
@@ -1034,6 +1529,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "graph": {
                         "vertices_count": len(vertices_with_coords),
                         "edges_count": len(edges),
+                        "live_edge_summary": live_edge_summary,
+                        "network_insights": network_insights,
+                        "insights_history_meta": history_meta,
                         "source_files": {
                             "vertices": str(GRAPH_VERTICES_PATH),
                             "edges": str(GRAPH_EDGES_PATH),
@@ -1062,13 +1560,37 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if path == "/api/network/graph":
             # Grafo y metadatos usados por la vista de red logistica.
+            persist_meta = persist_network_insights_snapshot(network_insights)
             self._json({
                 "vertices": vertices_with_coords,
-                "edges": edges,
+                "edges": edges_with_live,
                 "warehouse_aliases": warehouse_aliases,
                 "weather_factor": round(weather_factor, 3),
                 "weather_impact_level": impact_level,
+                "live_edge_summary": live_edge_summary,
+                "network_insights": network_insights,
+                "insights_persist": persist_meta,
             })
+            return
+
+        if path == "/api/network/insights/history":
+            snapshots = int((query.get("snapshots") or ["10"])[0])
+            history = load_network_insights_history(
+                profile=insights_profile,
+                min_congestion=insights_min_congestion,
+                snapshots=snapshots,
+            )
+            self._json(
+                {
+                    "items": history.get("items", []),
+                    "meta": history.get("meta", {}),
+                    "filters": {
+                        "profile": insights_profile,
+                        "min_congestion": insights_min_congestion,
+                        "snapshots": snapshots,
+                    },
+                }
+            )
             return
 
         if path == "/api/network/best-route":
@@ -1099,12 +1621,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 })
                 return
 
-            route = dijkstra(vertices, edges, source, target, profile, weather_factor)
+            route = dijkstra(vertices, edges_with_live, source, target, profile, weather_factor)
             if route is None:
                 self._json({"error": "No se pudo calcular ruta para ese origen/destino"}, status=HTTPStatus.NOT_FOUND)
                 return
 
-            self._json({"route": route})
+            self._json({"route": route, "live_edge_summary": live_edge_summary})
             return
 
         self._json({"error": "endpoint no soportado"}, status=HTTPStatus.NOT_FOUND)

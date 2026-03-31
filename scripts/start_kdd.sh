@@ -73,7 +73,7 @@ else
 fi
 
 echo
-echo "Sanity check Hive streaming (tablas + vistas Madrid)..."
+echo "Sanity check Hive streaming (tablas + vistas hora de Madrid)..."
 if ! sg docker -c "docker compose exec -T spark-client spark-sql -e \"SHOW TABLES IN transport_analytics LIKE 'delay_metrics_streaming'; SHOW TABLES IN transport_analytics LIKE 'weather_observations_streaming'; SHOW TABLES IN transport_analytics LIKE 'v_delay_metrics_streaming_madrid'; SHOW TABLES IN transport_analytics LIKE 'v_weather_observations_madrid'; SELECT COUNT(*) AS delay_rows FROM transport_analytics.v_delay_metrics_streaming_madrid; SELECT COUNT(*) AS weather_rows FROM transport_analytics.v_weather_observations_madrid;\"" >/tmp/start_kdd_hive_sanity.log 2>&1; then
   echo "[WARN] Fallo en sanity check Hive streaming."
   tail -n 30 /tmp/start_kdd_hive_sanity.log || true

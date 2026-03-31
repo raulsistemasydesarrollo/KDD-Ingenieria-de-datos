@@ -33,10 +33,12 @@
         </div>
         <div id="map"></div>
         <div class="legend" id="fleet-legend">
-          <span><i class="dot warehouse-high"></i>Almacen critico</span>
-          <span><i class="dot warehouse-medium"></i>Almacen medio</span>
-          <span><i class="dot vehicle-delay"></i>Camion con retraso alto</span>
-          <span><i class="line route-weather"></i>Traza y rumbo (solo vehiculo seleccionado)</span>
+          <span><i class="dot warehouse-high"></i>Almacen (criticidad alta)</span>
+          <span><i class="dot warehouse-medium"></i>Almacen (criticidad media)</span>
+          <span><i class="dot vehicle-live"></i>Vehiculo en operacion normal</span>
+          <span><i class="dot vehicle-delay"></i>Vehiculo con delay >= 15 min</span>
+          <span><i class="line trace-line"></i>Traza historica (solo vehiculo seleccionado)</span>
+          <span><i class="line projection-line"></i>Proyeccion al siguiente nodo (vehiculo seleccionado)</span>
         </div>
         <div class="row">
           <label for="rt-source-select">Origen RT</label>
@@ -89,6 +91,14 @@
           <span id="route-status" class="route-status">Pendiente de calculo</span>
         </div>
         <div id="network-map"></div>
+        <div class="legend" id="network-legend">
+          <span><i class="dot warehouse-high"></i>Nodo logistico de alta criticidad</span>
+          <span><i class="dot warehouse-medium"></i>Nodo logistico de criticidad media</span>
+          <span><i class="line route-line"></i>Tramo de ruta calculada (rojo + grosor alto)</span>
+          <span><i class="line congestion-high-line"></i>Congestion alta en tramo</span>
+          <span><i class="line congestion-medium-line"></i>Congestion media en tramo</span>
+          <span><i class="line congestion-low-line"></i>Sin congestion alta detectada (usa nivel meteo global)</span>
+        </div>
         <div class="table-wrap">
           <table id="all-routes-table">
             <thead>
@@ -117,6 +127,72 @@
             </thead>
             <tbody>
               <tr><td>Estado</td><td>Selecciona origen y destino para calcular ruta</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Insights de red (live)</h3>
+        <div class="row">
+          <label for="insights-profile-select">Perfil insights</label>
+          <select id="insights-profile-select">
+            <option value="balanced">Balanceado</option>
+            <option value="fastest">Mas rapido</option>
+            <option value="resilient">Resiliente</option>
+          </select>
+          <label for="insights-congestion-select">Congestion minima</label>
+          <select id="insights-congestion-select">
+            <option value="all">Todas</option>
+            <option value="low">Baja o superior</option>
+            <option value="medium">Media o superior</option>
+            <option value="high">Solo alta</option>
+          </select>
+        </div>
+        <div class="insights-grid">
+          <div class="table-wrap small">
+            <table id="bottlenecks-table">
+              <thead>
+                <tr>
+                  <th>Tramo</th>
+                  <th>Delay ef. (min)</th>
+                  <th>Congestion</th>
+                  <th>Muestras live</th>
+                  <th>Impacto</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="5">Cargando cuellos de botella...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap small">
+            <table id="critical-nodes-table">
+              <thead>
+                <tr>
+                  <th>Nodo</th>
+                  <th>Criticidad</th>
+                  <th>Grado</th>
+                  <th>Delay inc.</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="5">Cargando nodos criticos...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-wrap small">
+          <table id="insights-history-table">
+            <thead>
+              <tr>
+                <th>Snapshot</th>
+                <th>Top tramo</th>
+                <th>Impacto</th>
+                <th>Top nodo</th>
+                <th>Score nodo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5">Cargando historico...</td></tr>
             </tbody>
           </table>
         </div>

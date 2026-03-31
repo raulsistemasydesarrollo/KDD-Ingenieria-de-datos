@@ -242,6 +242,30 @@ th {
   z-index: 1;
 }
 
+th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable-th::after {
+  content: " \21C5";
+  font-size: 0.72em;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+th.sortable-th.sort-asc::after {
+  content: " \2191";
+  color: var(--accent);
+  opacity: 1;
+}
+
+th.sortable-th.sort-desc::after {
+  content: " \2193";
+  color: var(--accent);
+  opacity: 1;
+}
+
 .summary {
   border: 1px dashed var(--line);
   border-radius: 12px;
@@ -282,6 +306,10 @@ th {
 
 .vehicle-delay {
   background: #b00020;
+}
+
+.vehicle-live {
+  background: #31c2ff;
 }
 
 .line {
@@ -328,8 +356,30 @@ body[data-theme="light"] .network-label {
   transition: transform 160ms ease, opacity 120ms ease;
 }
 
-.route-weather {
-  border-top-color: #ff4f6d;
+.trace-line {
+  border-top-color: #f18f01;
+}
+
+.projection-line {
+  border-top-color: #ffd166;
+  border-top-style: dashed;
+}
+
+.route-line {
+  border-top-color: #d7263d;
+  border-top-width: 4px;
+}
+
+.congestion-high-line {
+  border-top-color: #d7263d;
+}
+
+.congestion-medium-line {
+  border-top-color: #ffaf2f;
+}
+
+.congestion-low-line {
+  border-top-color: #7aa2c7;
 }
 
 .truck-marker {
@@ -425,6 +475,22 @@ body[data-theme="light"] #all-routes-table .route-hit td {
   color: var(--danger);
 }
 
+.insights-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  margin-top: 0.7rem;
+}
+
+#bottlenecks-table td,
+#bottlenecks-table th,
+#critical-nodes-table td,
+#critical-nodes-table th,
+#insights-history-table td,
+#insights-history-table th {
+  white-space: nowrap;
+}
+
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
@@ -432,5 +498,9 @@ body[data-theme="light"] #all-routes-table .route-hit td {
 
   #map {
     height: 340px;
+  }
+
+  .insights-grid {
+    grid-template-columns: 1fr;
   }
 }

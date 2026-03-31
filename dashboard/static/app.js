@@ -40,7 +40,12 @@ const state = {
   projectionLine: null,
   routeRequestInFlight: false,
   routeRecalcPending: false,
-  lastRouteCalcAt: null
+  lastRouteCalcAt: null,
+  liveEdgeSummary: null,
+  networkInsights: null,
+  insightsProfile: "balanced",
+  insightsMinCongestion: "all",
+  insightsHistory: null
 };
 
 // Formateadores de UI centralizados para evitar inconsistencias visuales.
@@ -55,6 +60,131 @@ const fmt = {
     return `${h} h ${m} min`;
   }
 };
+
+const SORTABLE_TABLE_IDS = [
+  "vehicle-table",
+  "all-routes-table",
+  "route-table",
+  "weather-table",
+  "bottlenecks-table",
+  "critical-nodes-table",
+  "insights-history-table"
+];
+
+const tableSortState = new Map();
+
+function parseEsDateTime(text) {
+  const m = String(text || "").trim().match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/
+  );
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  let year = Number(m[3]);
+  if (year < 100) year += 2000;
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = Number(m[6] || 0);
+  const dt = new Date(year, month, day, hour, minute, second);
+  return Number.isNaN(dt.getTime()) ? null : dt.getTime();
+}
+
+function parseDurationMinutes(text) {
+  const raw = String(text || "").toLowerCase().trim();
+  if (!raw) return null;
+  const hm = raw.match(/^(\d+)\s*h\s*(\d+)\s*min$/);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+  const onlyMin = raw.match(/^(\d+)\s*min$/);
+  if (onlyMin) return Number(onlyMin[1]);
+  return null;
+}
+
+function sortValueFromCellText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return { type: "empty", value: "" };
+  const asDate = parseEsDateTime(raw);
+  if (asDate !== null) return { type: "number", value: asDate };
+  const asDuration = parseDurationMinutes(raw);
+  if (asDuration !== null) return { type: "number", value: asDuration };
+  if (!/^[A-Za-z]+[0-9]+$/.test(raw)) {
+    const firstNumber = raw.match(/-?\d+(?:[.,]\d+)?/);
+    if (firstNumber) {
+      return { type: "number", value: Number(firstNumber[0].replace(",", ".")) };
+    }
+  }
+  return { type: "text", value: raw.toUpperCase() };
+}
+
+function compareCellValues(a, b) {
+  if (a.type === "empty" && b.type !== "empty") return 1;
+  if (a.type !== "empty" && b.type === "empty") return -1;
+  if (a.type === "number" && b.type === "number") return a.value - b.value;
+  return String(a.value).localeCompare(String(b.value), "es");
+}
+
+function updateSortableHeaderState(tableId) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const headers = table.querySelectorAll("thead th");
+  headers.forEach((th, idx) => {
+    th.classList.add("sortable-th");
+    th.classList.remove("sort-asc", "sort-desc");
+    const state = tableSortState.get(tableId);
+    if (!state || state.col !== idx) return;
+    th.classList.add(state.dir === "desc" ? "sort-desc" : "sort-asc");
+  });
+}
+
+function applyTableSortState(tableId) {
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  if (!tbody) return;
+  const state = tableSortState.get(tableId);
+  if (!state) {
+    updateSortableHeaderState(tableId);
+    return;
+  }
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  const sortableRows = rows
+    .filter((r) => r.children.length > state.col && r.querySelectorAll("td").length > 0)
+    .map((row, idx) => {
+      const cell = row.children[state.col];
+      const sortValue = sortValueFromCellText(cell?.textContent || "");
+      return { row, idx, sortValue };
+    });
+  sortableRows.sort((left, right) => {
+    const cmp = compareCellValues(left.sortValue, right.sortValue);
+    if (cmp !== 0) return state.dir === "desc" ? -cmp : cmp;
+    return left.idx - right.idx;
+  });
+  sortableRows.forEach((item) => tbody.appendChild(item.row));
+  updateSortableHeaderState(tableId);
+}
+
+function applyAllTableSortStates() {
+  SORTABLE_TABLE_IDS.forEach((tableId) => applyTableSortState(tableId));
+}
+
+function bindSortableTables() {
+  SORTABLE_TABLE_IDS.forEach((tableId) => {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const headers = table.querySelectorAll("thead th");
+    headers.forEach((th, colIdx) => {
+      if (th.dataset.sortBound === "1") return;
+      th.dataset.sortBound = "1";
+      th.classList.add("sortable-th");
+      th.addEventListener("click", () => {
+        const prev = tableSortState.get(tableId);
+        const dir = prev && prev.col === colIdx && prev.dir === "asc" ? "desc" : "asc";
+        tableSortState.set(tableId, { col: colIdx, dir });
+        applyTableSortState(tableId);
+      });
+    });
+    updateSortableHeaderState(tableId);
+  });
+}
 
 async function fetchJson(url) {
   // Wrapper fetch con mensaje de error enriquecido para diagnostico en UI.
@@ -144,7 +274,7 @@ function buildTruckIcon(vehicle, selected, angle = 0) {
   });
 }
 
-function renderOverview(overview) {
+function renderOverview(overview, liveEdgeSummary = null) {
   const cards = [
     ["Vehiculos activos", overview.vehicles_active],
     ["Eventos cargados", overview.events_loaded],
@@ -154,6 +284,9 @@ function renderOverview(overview) {
     ["Impacto meteo", (overview.weather_impact_level || "low").toUpperCase()],
     ["Ultimo evento", fmt.dt(overview.latest_event_time)]
   ];
+  if (liveEdgeSummary) {
+    cards.push(["Aristas live", `${liveEdgeSummary.edges_with_live_samples || 0}`]);
+  }
   document.getElementById("overview-cards").innerHTML = cards
     .map(([title, value]) => `<article class=\"card\"><h4>${title}</h4><div class=\"big\">${value}</div></article>`)
     .join("");
@@ -221,6 +354,7 @@ function renderVehicleTable(items) {
       }
     )
     .join("");
+  applyTableSortState("vehicle-table");
 }
 
 function computeBearing(from, to) {
@@ -768,6 +902,7 @@ function renderWeather(items) {
     `
     )
     .join("");
+  applyTableSortState("weather-table");
 }
 
 function clamp(v, min, max) {
@@ -811,7 +946,12 @@ function hydrateVehicleSelect(items) {
 }
 
 function hydrateGraphControls(vertices) {
-  const nodeOptions = vertices.map((v) => `<option value=\"${v.id}\">${v.id} - ${v.name}</option>`).join("");
+  const sortedVertices = [...(vertices || [])].sort((a, b) => {
+    const left = `${a?.id || ""} - ${a?.name || ""}`.toUpperCase();
+    const right = `${b?.id || ""} - ${b?.name || ""}`.toUpperCase();
+    return left.localeCompare(right, "es");
+  });
+  const nodeOptions = sortedVertices.map((v) => `<option value=\"${v.id}\">${v.id} - ${v.name}</option>`).join("");
   const options = `<option value=\"\">TODOS</option>${nodeOptions}`;
   document.getElementById("source-select").innerHTML = options;
   document.getElementById("target-select").innerHTML = options;
@@ -857,16 +997,128 @@ function weatherStrokeColor(level) {
   return "#7aa2c7";
 }
 
+function edgeDelayMinutes(edge) {
+  if (!edge) return 0;
+  const effective = Number(edge.effective_avg_delay_minutes);
+  if (Number.isFinite(effective)) return effective;
+  return Number(edge.avg_delay_minutes || 0);
+}
+
+function edgeDelayLabel(edge) {
+  const liveSamples = Number(edge?.live_sample_count || 0);
+  if (liveSamples > 0) {
+    const live = Number(edge?.live_avg_delay_minutes ?? edgeDelayMinutes(edge));
+    return `${fmt.n(edgeDelayMinutes(edge), 1)} (live ${fmt.n(live, 1)})`;
+  }
+  return fmt.n(edgeDelayMinutes(edge), 1);
+}
+
+function edgeCongestionLevel(edge) {
+  return edge?.congestion_level || "unknown";
+}
+
+function buildGraphApiUrl() {
+  const params = new URLSearchParams({
+    insights_profile: state.insightsProfile || "balanced",
+    insights_min_congestion: state.insightsMinCongestion || "all"
+  });
+  return `/api/network/graph?${params.toString()}`;
+}
+
+function buildInsightsHistoryApiUrl() {
+  const params = new URLSearchParams({
+    insights_profile: state.insightsProfile || "balanced",
+    insights_min_congestion: state.insightsMinCongestion || "all",
+    snapshots: "12"
+  });
+  return `/api/network/insights/history?${params.toString()}`;
+}
+
+function renderNetworkInsights(insights) {
+  const bottlenecksBody = document.querySelector("#bottlenecks-table tbody");
+  const nodesBody = document.querySelector("#critical-nodes-table tbody");
+  if (!bottlenecksBody || !nodesBody) return;
+  const topBottlenecks = insights?.top_bottlenecks || [];
+  const topNodes = insights?.top_critical_nodes || [];
+
+  if (!topBottlenecks.length) {
+    bottlenecksBody.innerHTML = `<tr><td colspan="5">Sin datos live suficientes</td></tr>`;
+  } else {
+    bottlenecksBody.innerHTML = topBottlenecks
+      .map(
+        (item) => `
+      <tr>
+        <td>${item.src} -> ${item.dst}</td>
+        <td>${fmt.n(item.effective_avg_delay_minutes, 1)}</td>
+        <td>${String(item.congestion_level || "unknown").toUpperCase()}</td>
+        <td>${item.live_sample_count || 0}</td>
+        <td>${fmt.n(item.impact_score, 2)}</td>
+      </tr>
+    `
+      )
+      .join("");
+  }
+  applyTableSortState("bottlenecks-table");
+
+  if (!topNodes.length) {
+    nodesBody.innerHTML = `<tr><td colspan="5">Sin datos de criticidad</td></tr>`;
+  } else {
+    nodesBody.innerHTML = topNodes
+      .map(
+        (item) => `
+      <tr>
+        <td>${item.id}</td>
+        <td>${String(item.criticality || "unknown").toUpperCase()}</td>
+        <td>${item.degree || 0}</td>
+        <td>${fmt.n(item.avg_incident_delay_minutes, 1)}</td>
+        <td>${fmt.n(item.criticality_score, 2)}</td>
+      </tr>
+    `
+      )
+      .join("");
+  }
+  applyTableSortState("critical-nodes-table");
+}
+
+function renderInsightsHistory(history) {
+  const tbody = document.querySelector("#insights-history-table tbody");
+  if (!tbody) return;
+  const items = history?.items || [];
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="5">Sin historico disponible en Cassandra</td></tr>`;
+    applyTableSortState("insights-history-table");
+    return;
+  }
+  tbody.innerHTML = items
+    .map((item) => {
+      const topEdge = item.top_bottleneck?.entity_id || "-";
+      const edgeImpact = item.top_bottleneck ? fmt.n(item.top_bottleneck.impact_score, 2) : "-";
+      const topNode = item.top_node?.entity_id || "-";
+      const nodeScore = item.top_node ? fmt.n(item.top_node.criticality_score, 2) : "-";
+      return `
+      <tr>
+        <td>${fmt.dt(item.snapshot_time)}</td>
+        <td>${topEdge}</td>
+        <td>${edgeImpact}</td>
+        <td>${topNode}</td>
+        <td>${nodeScore}</td>
+      </tr>
+    `;
+    })
+    .join("");
+  applyTableSortState("insights-history-table");
+}
+
 function profileBaseMinutes(profile, edge) {
   const distance = Number(edge.distance_km || 0);
-  const delay = Number(edge.avg_delay_minutes || 0);
+  const delay = edgeDelayMinutes(edge);
   if (profile === "fastest") return (distance / 88.0) * 60.0 + delay * 0.9;
   if (profile === "resilient") return (distance / 70.0) * 60.0 + delay * 1.15;
   return (distance / 75.0) * 60.0 + delay;
 }
 
 function computeEdgeEstimate(edge, profile) {
-  const delay = Number(edge.avg_delay_minutes || 0);
+  const delay = edgeDelayMinutes(edge);
   const weatherFactor = Number(state.weatherFactor || 0);
   const base = profileBaseMinutes(profile, edge);
   let penalty = delay * weatherFactor * 1.9;
@@ -884,16 +1136,57 @@ function renderAllRoutesTable(graph, route = null) {
   if (!tbody) return;
   if (!graph?.edges?.length) {
     tbody.innerHTML = `<tr><td colspan="7">No hay rutas disponibles</td></tr>`;
+    applyTableSortState("all-routes-table");
     return;
   }
   const profile = document.getElementById("profile-select")?.value || "balanced";
+  const selectedSource = document.getElementById("source-select")?.value || "";
+  const selectedTarget = document.getElementById("target-select")?.value || "";
   const routeEdges = normalizeRouteEdgeSet(route);
-  const rows = [];
-  graph.edges.forEach((edge) => {
-    const forward = { src: edge.src, dst: edge.dst, edge };
-    const backward = { src: edge.dst, dst: edge.src, edge };
-    rows.push(forward, backward);
-  });
+  let rows = [];
+
+  const hasConcreteSelection = !!selectedSource && !!selectedTarget && selectedSource !== selectedTarget;
+  if (hasConcreteSelection) {
+    const routeRows =
+      route?.edges?.map((edge) => ({
+        src: edge.src,
+        dst: edge.dst,
+        edge
+      })) || [];
+
+    if (routeRows.length) {
+      rows = routeRows;
+    } else {
+      const directEdge = graph.edges.find(
+        (edge) =>
+          (edge.src === selectedSource && edge.dst === selectedTarget) ||
+          (edge.src === selectedTarget && edge.dst === selectedSource)
+      );
+      if (directEdge) {
+        const directed =
+          directEdge.src === selectedSource && directEdge.dst === selectedTarget
+            ? { src: directEdge.src, dst: directEdge.dst, edge: directEdge }
+            : { src: selectedSource, dst: selectedTarget, edge: directEdge };
+        rows = [directed];
+      }
+    }
+  } else {
+    graph.edges.forEach((edge) => {
+      const forward = { src: edge.src, dst: edge.dst, edge };
+      const backward = { src: edge.dst, dst: edge.src, edge };
+      rows.push(forward, backward);
+    });
+  }
+
+  if (!rows.length) {
+    if (hasConcreteSelection) {
+      tbody.innerHTML = `<tr><td colspan="7">Sin tramos para la seleccion ${selectedSource} -> ${selectedTarget}</td></tr>`;
+    } else {
+      tbody.innerHTML = `<tr><td colspan="7">No hay datos de rutas para mostrar</td></tr>`;
+    }
+    applyTableSortState("all-routes-table");
+    return;
+  }
 
   tbody.innerHTML = rows
     .map((row) => {
@@ -903,7 +1196,7 @@ function renderAllRoutesTable(graph, route = null) {
       <tr class=\"${active ? "route-hit" : ""}\">
         <td>${row.src} -> ${row.dst}</td>
         <td>${fmt.n(row.edge.distance_km, 1)}</td>
-        <td>${fmt.n(row.edge.avg_delay_minutes, 1)}</td>
+        <td>${edgeDelayLabel(row.edge)}</td>
         <td>${fmt.hm(estimate.base)}</td>
         <td>+${fmt.hm(estimate.penalty)}</td>
         <td>${fmt.hm(estimate.total)}</td>
@@ -912,6 +1205,7 @@ function renderAllRoutesTable(graph, route = null) {
     `;
     })
     .join("");
+  applyTableSortState("all-routes-table");
 }
 
 function renderRouteSummary(route) {
@@ -919,6 +1213,7 @@ function renderRouteSummary(route) {
   if (!tbody) return;
   if (!route) {
     tbody.innerHTML = `<tr><td>Estado</td><td>Selecciona origen y destino para calcular ruta</td></tr>`;
+    applyTableSortState("route-table");
     return;
   }
   const base = Number(route.base_travel_minutes || 0);
@@ -936,9 +1231,11 @@ function renderRouteSummary(route) {
     <tr><td>Impacto meteo en ruta</td><td>${fmt.n(climateImpactPct, 1)}%</td></tr>
     <tr><td>Delay esperado</td><td>${fmt.hm(route.expected_delay_minutes)}</td></tr>
     <tr><td>Tiempo estimado</td><td>${fmt.hm(route.estimated_travel_minutes)}</td></tr>
+    <tr><td>Aristas con telemetria live</td><td>${(route.edges || []).filter((e) => Number(e.live_sample_count || 0) > 0).length}</td></tr>
     <tr><td>Factor meteo global</td><td>${fmt.n(route.weather_factor, 2)}</td></tr>
     <tr><td>Factor meteo aplicado</td><td>${fmt.n(effectiveWeatherFactor, 2)} (${effectiveImpactLevel.toUpperCase()})</td></tr>
   `;
+  applyTableSortState("route-table");
 }
 
 function setRouteStatus(text, level = "") {
@@ -965,11 +1262,12 @@ function renderWarehousesOnMap(vertices) {
       fillColor: color,
       fillOpacity: 0.85
     });
-    marker.bindTooltip(`${v.id} - ${v.name}`, {
+    marker.bindTooltip(v.id, {
       direction: "top",
       permanent: true,
       className: "warehouse-label"
     });
+    marker.bindPopup(`<strong>${v.id}</strong> - ${v.name}<br/>Criticidad: ${v.criticality}`);
     marker.addTo(state.warehouseLayer);
     bounds.push([v.latitude, v.longitude]);
   });
@@ -1000,20 +1298,28 @@ function renderNetworkMap(graph, route = null) {
     const d = byId[e.dst];
     if (!s || !d) return;
     const highlighted = routeEdges.has(routeEdgeKey(e.src, e.dst));
+    const congestion = edgeCongestionLevel(e);
+    let baseColor = weatherColor;
+    if (congestion === "high") baseColor = "#d7263d";
+    if (congestion === "medium") baseColor = "#ffaf2f";
+    const liveSampleCount = Number(e.live_sample_count || 0);
     const poly = L.polyline(
       [
         [s.latitude, s.longitude],
         [d.latitude, d.longitude]
       ],
       {
-        color: highlighted ? "#d7263d" : weatherColor,
-        weight: highlighted ? 5 : Math.max(2, 2 + state.weatherFactor),
+        color: highlighted ? "#d7263d" : baseColor,
+        weight: highlighted ? 5 : Math.max(2, 2 + state.weatherFactor + Math.min(2, liveSampleCount)),
         opacity: highlighted ? 0.95 : 0.70
       }
     ).addTo(state.networkLayer);
-    poly.bindTooltip(`${e.src} -> ${e.dst} | ${e.distance_km} km | delay ${e.avg_delay_minutes} min`, {
+    poly.bindTooltip(
+      `${e.src} -> ${e.dst} | ${e.distance_km} km | delay ${fmt.n(edgeDelayMinutes(e), 1)} min | congestion ${congestion}`,
+      {
       sticky: true
-    });
+      }
+    );
   });
 
   graph.vertices.forEach((v) => {
@@ -1144,7 +1450,8 @@ async function refreshFleet() {
 
   const visibleItems = resolveVisibleVehicles(latestRes.items);
 
-  renderOverview(overviewRes.overview);
+  state.liveEdgeSummary = overviewRes.live_edge_summary || null;
+  renderOverview(overviewRes.overview, state.liveEdgeSummary);
   renderDataSources(overviewRes.vehicle_source, overviewRes.weather_source);
   renderFleetFreshness(overviewRes.overview.latest_event_time);
   renderVehicleTable(visibleItems);
@@ -1184,8 +1491,11 @@ async function refreshVehicleHistory() {
 }
 
 async function loadGraph() {
-  const graph = await fetchJson("/api/network/graph");
+  const [graph, history] = await Promise.all([fetchJson(buildGraphApiUrl()), fetchJson(buildInsightsHistoryApiUrl())]);
   state.graph = graph;
+  state.liveEdgeSummary = graph.live_edge_summary || state.liveEdgeSummary;
+  state.networkInsights = graph.network_insights || null;
+  state.insightsHistory = history || null;
   state.weatherFactor = Number(graph.weather_factor || state.weatherFactor || 0);
   state.weatherImpactLevel = graph.weather_impact_level || state.weatherImpactLevel || "low";
   hydrateGraphControls(graph.vertices);
@@ -1193,6 +1503,17 @@ async function loadGraph() {
   renderAllRoutesTable(graph, null);
   renderNetworkMap(graph, null);
   renderRouteSummary(null);
+  renderNetworkInsights(state.networkInsights);
+  renderInsightsHistory(state.insightsHistory);
+}
+
+async function refreshNetworkInsightsOnly() {
+  if (!state.graph) return;
+  const [graph, history] = await Promise.all([fetchJson(buildGraphApiUrl()), fetchJson(buildInsightsHistoryApiUrl())]);
+  state.networkInsights = graph.network_insights || null;
+  state.insightsHistory = history || null;
+  renderNetworkInsights(state.networkInsights);
+  renderInsightsHistory(state.insightsHistory);
 }
 
 async function calculateRoute() {
@@ -1237,13 +1558,16 @@ async function calculateRoute() {
   }
 
   try {
-    const [result, weatherRes, overviewRes] = await Promise.all([
+    const [result, weatherRes, overviewRes, graphRes, historyRes] = await Promise.all([
       fetchJson(
         `/api/network/best-route?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}&profile=${encodeURIComponent(profile)}`
       ),
       fetchJson("/api/weather/latest?limit=12"),
-      fetchJson("/api/overview")
+      fetchJson("/api/overview"),
+      fetchJson(buildGraphApiUrl()),
+      fetchJson(buildInsightsHistoryApiUrl())
     ]);
+    state.graph = graphRes;
     state.route = result.route;
     state.lastRouteCalcAt = new Date().toISOString();
     state.weatherFactor = Number(result.route.route_weather_factor || result.route.weather_factor || overviewRes.overview.weather_factor || 0);
@@ -1252,7 +1576,10 @@ async function calculateRoute() {
     const visibleItems = resolveVisibleVehicles(state.allVehicles?.length ? state.allVehicles : state.vehicles);
     state.vehicles = visibleItems;
     renderWeather(routeAdjustedWeather(weatherRes.items, state.route));
-    renderOverview(overviewRes.overview);
+    state.liveEdgeSummary = result.live_edge_summary || overviewRes.live_edge_summary || state.liveEdgeSummary;
+    state.networkInsights = graphRes.network_insights || state.networkInsights;
+    state.insightsHistory = historyRes || state.insightsHistory;
+    renderOverview(overviewRes.overview, state.liveEdgeSummary);
     renderDataSources(overviewRes.vehicle_source, overviewRes.weather_source);
     renderFleetFreshness(overviewRes.overview.latest_event_time);
     renderVehicleTable(visibleItems);
@@ -1262,6 +1589,8 @@ async function calculateRoute() {
     renderAllRoutesTable(state.graph, state.route);
     renderNetworkMap(state.graph, state.route);
     renderRouteSummary(state.route);
+    renderNetworkInsights(state.networkInsights);
+    renderInsightsHistory(state.insightsHistory);
     setRouteStatus(
       `Ruta actualizada (${profile}) ${new Date().toLocaleTimeString("es-ES", { hour12: false })}`,
       "ok"
@@ -1304,7 +1633,21 @@ function bindEvents() {
   document.getElementById("route-btn").addEventListener("click", calculateRoute);
   document.getElementById("source-select").addEventListener("change", calculateRoute);
   document.getElementById("target-select").addEventListener("change", calculateRoute);
-  document.getElementById("profile-select").addEventListener("change", calculateRoute);
+  document.getElementById("profile-select").addEventListener("change", () => {
+    const profile = document.getElementById("profile-select").value || "balanced";
+    state.insightsProfile = profile;
+    const insightsProfileSelect = document.getElementById("insights-profile-select");
+    if (insightsProfileSelect) insightsProfileSelect.value = profile;
+    calculateRoute();
+  });
+  document.getElementById("insights-profile-select").addEventListener("change", async () => {
+    state.insightsProfile = document.getElementById("insights-profile-select").value || "balanced";
+    await refreshNetworkInsightsOnly();
+  });
+  document.getElementById("insights-congestion-select").addEventListener("change", async () => {
+    state.insightsMinCongestion = document.getElementById("insights-congestion-select").value || "all";
+    await refreshNetworkInsightsOnly();
+  });
   document.getElementById("rt-source-select").addEventListener("change", syncRealtimeViewFromFilters);
   document.getElementById("rt-target-select").addEventListener("change", syncRealtimeViewFromFilters);
   document.getElementById("play-btn").addEventListener("click", () => {
@@ -1313,6 +1656,7 @@ function bindEvents() {
   });
   document.getElementById("theme-btn").addEventListener("click", () => {
     applyTheme(state.theme === "dark" ? "light" : "dark");
+    applyAllTableSortStates();
   });
 }
 
@@ -1321,6 +1665,11 @@ async function bootstrap() {
   initMap();
   initNetworkMap();
   initTheme();
+  state.insightsProfile = document.getElementById("insights-profile-select")?.value || "balanced";
+  state.insightsMinCongestion = document.getElementById("insights-congestion-select")?.value || "all";
+  const routeProfile = document.getElementById("profile-select");
+  if (routeProfile) routeProfile.value = state.insightsProfile;
+  bindSortableTables();
   bindEvents();
   await Promise.all([refreshFleet(), loadGraph()]);
   await calculateRoute();

@@ -34,6 +34,7 @@ import static org.apache.spark.sql.functions.get_json_object;
 import static org.apache.spark.sql.functions.lit;
 import static org.apache.spark.sql.functions.map_entries;
 import static org.apache.spark.sql.functions.max;
+import static org.apache.spark.sql.functions.date_trunc;
 import static org.apache.spark.sql.functions.row_number;
 import static org.apache.spark.sql.functions.to_timestamp;
 import static org.apache.spark.sql.functions.window;
@@ -47,6 +48,7 @@ import static org.apache.spark.sql.functions.explode;
  * <ul>
  *   <li>batch: procesa historico, genera metricas, grafo, shortest paths y scoring ML.</li>
  *   <li>streaming: consume GPS/Weather desde Kafka y persiste resultados en Hive/Cassandra.</li>
+ *   <li>insights-sync: consolida snapshots de insights de Cassandra hacia tablas Hive.</li>
  * </ul>
  *
  * <p>Este programa prioriza resiliencia operativa:
@@ -69,6 +71,9 @@ public final class LogisticsAnalyticsJob {
     private static final String STREAMING_ENRICHED_EVENTS_FALLBACK_PATH =
             "hdfs://hadoop:9000/data/curated/enriched_events_streaming";
     private static final String DELAY_RISK_MODEL_PATH = "hdfs://hadoop:9000/models/delay_risk_rf";
+    private static final String CASSANDRA_INSIGHTS_TABLE = "network_insights_snapshots";
+    private static final String HIVE_INSIGHTS_SNAPSHOTS_TABLE = DATABASE + ".network_insights_snapshots_hive";
+    private static final String HIVE_INSIGHTS_HOURLY_TRENDS_TABLE = DATABASE + ".network_insights_hourly_trends";
 
     private LogisticsAnalyticsJob() {
     }
@@ -98,6 +103,7 @@ public final class LogisticsAnalyticsJob {
         switch (mode) {
             case "batch" -> runBatchAnalysis(spark);
             case "streaming" -> runStreamingAnalysis(spark);
+            case "insights-sync" -> runInsightsSync(spark);
             default -> throw new IllegalArgumentException("Modo no soportado: " + mode);
         }
 
@@ -254,6 +260,96 @@ public final class LogisticsAnalyticsJob {
                 .start();
 
         spark.streams().awaitAnyTermination();
+    }
+
+    private static void runInsightsSync(SparkSession spark) {
+        // Consolida snapshots de insights (Cassandra) en tablas Hive para reporting.
+        try {
+            Dataset<Row> cassandraInsights = spark.read()
+                    .format("org.apache.spark.sql.cassandra")
+                    .option("keyspace", "transport")
+                    .option("table", CASSANDRA_INSIGHTS_TABLE)
+                    .load();
+
+            if (cassandraInsights.isEmpty()) {
+                System.err.println("WARN: no hay snapshots de insights en Cassandra para sincronizar.");
+                return;
+            }
+
+            Dataset<Row> normalized = cassandraInsights
+                    .filter(col("snapshot_time").isNotNull())
+                    .select(
+                            col("bucket"),
+                            col("entity_type"),
+                            col("profile"),
+                            col("min_congestion"),
+                            col("snapshot_time"),
+                            col("rank"),
+                            col("entity_id"),
+                            col("impact_score"),
+                            col("criticality_score"),
+                            col("effective_avg_delay_minutes"),
+                            col("total_minutes"),
+                            col("congestion_level"),
+                            col("live_sample_count"))
+                    .withColumn("snapshot_hour", date_trunc("hour", col("snapshot_time")));
+
+            normalized.write()
+                    .mode(SaveMode.Overwrite)
+                    .saveAsTable(HIVE_INSIGHTS_SNAPSHOTS_TABLE);
+
+            WindowSpec topEdgeWindow = Window
+                    .partitionBy("snapshot_hour", "profile", "min_congestion")
+                    .orderBy(col("impact_score").desc(), col("rank").asc(), col("entity_id").asc());
+            Dataset<Row> topEdges = normalized
+                    .filter(col("entity_type").equalTo("edge"))
+                    .withColumn("row_num", row_number().over(topEdgeWindow))
+                    .filter(col("row_num").equalTo(1))
+                    .select(
+                            col("snapshot_hour"),
+                            col("profile"),
+                            col("min_congestion"),
+                            col("entity_id").alias("top_edge_id"),
+                            col("impact_score").alias("top_edge_impact_score"),
+                            col("effective_avg_delay_minutes").alias("top_edge_delay_minutes"),
+                            col("total_minutes").alias("top_edge_total_minutes"),
+                            col("congestion_level").alias("top_edge_congestion_level"),
+                            col("live_sample_count").alias("top_edge_live_sample_count"));
+
+            WindowSpec topNodeWindow = Window
+                    .partitionBy("snapshot_hour", "profile", "min_congestion")
+                    .orderBy(col("criticality_score").desc(), col("rank").asc(), col("entity_id").asc());
+            Dataset<Row> topNodes = normalized
+                    .filter(col("entity_type").equalTo("node"))
+                    .withColumn("row_num", row_number().over(topNodeWindow))
+                    .filter(col("row_num").equalTo(1))
+                    .select(
+                            col("snapshot_hour"),
+                            col("profile"),
+                            col("min_congestion"),
+                            col("entity_id").alias("top_node_id"),
+                            col("criticality_score").alias("top_node_criticality_score"),
+                            col("effective_avg_delay_minutes").alias("top_node_avg_incident_delay_minutes"),
+                            col("total_minutes").alias("top_node_avg_profile_minutes"));
+
+            Dataset<Row> hourlyTrends = topEdges
+                    .join(topNodes, new String[]{"snapshot_hour", "profile", "min_congestion"}, "full_outer")
+                    .orderBy(col("snapshot_hour").desc(), col("profile").asc(), col("min_congestion").asc());
+
+            hourlyTrends.write()
+                    .mode(SaveMode.Overwrite)
+                    .saveAsTable(HIVE_INSIGHTS_HOURLY_TRENDS_TABLE);
+
+            System.out.println(
+                    "INFO: insights-sync completado. Tablas Hive: "
+                            + HIVE_INSIGHTS_SNAPSHOTS_TABLE + ", "
+                            + HIVE_INSIGHTS_HOURLY_TRENDS_TABLE);
+        } catch (Exception syncFailure) {
+            System.err.println(
+                    "WARN: fallo en insights-sync Cassandra->Hive. "
+                            + "Se omite para no bloquear pipeline. Causa: "
+                            + syncFailure.getMessage());
+        }
     }
 
     private static Dataset<Row> enrichEvents(SparkSession spark, Dataset<Row> cleanedEvents) {
@@ -578,6 +674,24 @@ public final class LogisticsAnalyticsJob {
                             source text,
                             PRIMARY KEY (bucket, weather_timestamp, weather_event_id)
                         ) WITH CLUSTERING ORDER BY (weather_timestamp DESC, weather_event_id DESC)
+                        """);
+            session.execute("""
+                        CREATE TABLE IF NOT EXISTS transport.network_insights_snapshots (
+                            bucket text,
+                            entity_type text,
+                            profile text,
+                            min_congestion text,
+                            snapshot_time timestamp,
+                            rank int,
+                            entity_id text,
+                            impact_score double,
+                            criticality_score double,
+                            effective_avg_delay_minutes double,
+                            total_minutes double,
+                            congestion_level text,
+                            live_sample_count int,
+                            PRIMARY KEY ((bucket, entity_type, profile, min_congestion), snapshot_time, rank, entity_id)
+                        ) WITH CLUSTERING ORDER BY (snapshot_time DESC, rank ASC, entity_id ASC)
                         """);
         } catch (Exception cassandraFailure) {
             System.err.println(

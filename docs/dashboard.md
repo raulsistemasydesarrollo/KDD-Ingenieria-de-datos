@@ -77,6 +77,10 @@ Devuelve:
 - Aristas: conexiones del grafo (`data/graph/edges.csv`).
 - Arista roja: tramo perteneciente a la ruta calculada para el origen/destino seleccionados.
 - Color de arista base: severidad meteorologica agregada (low/medium/high).
+- Delay de arista en tabla/mapa: valor **efectivo** (`effective_avg_delay_minutes`) que mezcla:
+  - delay estatico del grafo (`avg_delay_minutes`),
+  - telemetria viva de flota (`planned_origin/planned_destination`, delay y velocidad recientes).
+- Cuando hay telemetria live en un tramo, se muestra etiqueta `live` en la tabla de rutas.
 
 ### Tabla de ruta (debajo del mapa logistico)
 
@@ -90,6 +94,39 @@ Muestra:
 - Delay esperado.
 - Tiempo estimado final.
 - Factor meteorologico aplicado.
+- Numero de aristas de la ruta con telemetria live usada en el calculo.
+
+### Insights de red (live)
+
+Bloque adicional en la vista de red con dos tablas:
+
+- `Cuellos de botella`: ranking de tramos por `impact_score` (delay efectivo, congestion, distancia y muestras live).
+- `Nodos criticos`: ranking de almacenes por `criticality_score` (grado, delay incidente medio, ratio de congestion alta y cobertura live).
+
+Filtros disponibles:
+
+- `Perfil insights`: recalcula score de impacto con los costes del perfil (`balanced`, `fastest`, `resilient`).
+- `Congestion minima`: filtra el ranking para mostrar solo tramos/nodos afectados por el nivel indicado (`all`, `low`, `medium`, `high`).
+- `Historico insights`: tabla de snapshots recientes persistidos en Cassandra por perfil/congestion.
+
+Endpoint historico:
+
+```bash
+curl -s "http://localhost:8501/api/network/insights/history?insights_profile=balanced&insights_min_congestion=all&snapshots=12"
+```
+
+## Consolidacion en Hive (reporting)
+
+Se incorpora modo Spark `insights-sync` para consolidar snapshots de Cassandra en Hive:
+
+```bash
+sg docker -c "docker compose exec -T spark-client /opt/spark-app/run-insights-sync.sh"
+```
+
+Tablas resultado:
+
+- `transport_analytics.network_insights_snapshots_hive` (detalle de snapshots).
+- `transport_analytics.network_insights_hourly_trends` (top tramo y top nodo por hora/perfil/congestion).
 
 ### Filtros de Analisis Logistico (solo vista derecha)
 
