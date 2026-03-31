@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Guia de operaciones y troubleshooting`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.1`
+- Fecha: `31/03/2026`
 
 ## Indice
 
@@ -23,6 +23,7 @@
 12. Bitacora operativa
 13. Operacion del dashboard (estado final)
 14. Troubleshooting dashboard
+15. Sync de insights Cassandra -> Hive
 
 Este documento resume los comandos recomendados para operar el entorno y validar resultados.
 
@@ -48,6 +49,10 @@ Parar todo el stack:
 ```
 
 ## Healthcheck en Airflow
+
+Captura de la vista operativa de Airflow:
+
+![Airflow](./airflow.png)
 
 Se incorporan dos DAGs de comprobacion:
 
@@ -252,6 +257,39 @@ Consultar clima reciente:
 docker compose exec -T cassandra cqlsh -e "SELECT weather_timestamp, warehouse_id, temperature_c, precipitation_mm, wind_kmh FROM transport.weather_observations_recent WHERE bucket='all' LIMIT 20;"
 ```
 
+Consultar snapshots de insights de red:
+
+```bash
+docker compose exec -T cassandra cqlsh -e "SELECT bucket, profile, min_congestion, snapshot_time, top_edge_id, top_node_id, impact_score FROM transport.network_insights_snapshots LIMIT 20;"
+```
+
+## Sync de insights Cassandra -> Hive
+
+Para consolidar snapshots de insights en Hive:
+
+```bash
+sg docker -c "docker compose exec -T spark-client /opt/spark-app/run-insights-sync.sh"
+```
+
+Tablas resultantes en Hive:
+
+- `transport_analytics.network_insights_snapshots_hive`
+- `transport_analytics.network_insights_hourly_trends`
+
+Validacion rapida:
+
+```bash
+docker compose exec -T spark-client spark-sql -e "SELECT COUNT(*) AS c FROM transport_analytics.network_insights_snapshots_hive;"
+docker compose exec -T spark-client spark-sql -e "SELECT hour_bucket, profile, min_congestion, top_edge_id, top_node_id FROM transport_analytics.network_insights_hourly_trends ORDER BY hour_bucket DESC LIMIT 20;"
+```
+
+Si aparece error `permission denied` al ejecutar `run-insights-sync.sh`:
+
+```bash
+chmod +x spark-app/run-insights-sync.sh
+sg docker -c "docker compose up -d --build spark-client"
+```
+
 ## Matriz operativa end-to-end
 
 Tabla de referencia rapida para trazar cada flujo desde origen hasta consumo analitico:
@@ -351,19 +389,20 @@ ORDER BY window_start_utc DESC
 LIMIT 10;
 ```
 
-## Bitacora operativa (actualizada 30/03/2026)
+## Bitacora operativa (actualizada 31/03/2026)
 
-Cambios aplicados en esta fecha:
+Cambios aplicados:
 
 1. Healthchecks Airflow estabilizados frente a ausencia temporal de tablas streaming fuente.
 2. Historial rojo de healthchecks limpiado en Airflow.
 3. NiFi reorganizado por dominios (`gps_ingestion` y `weather_ingestion`) en `kdd_ingestion_auto_v9`.
+4. Process Group legacy eliminado para evitar ruido visual en la UI de NiFi.
+5. Incorporado flujo de insights de red con persistencia en Cassandra y sync a Hive.
 
 ## Nota de tablas en tiempo real
 
 - `transport_analytics.enriched_events` es historico batch.
 - Para consultas en vivo de eventos enriquecidos usar `transport_analytics.enriched_events_streaming`.
-4. Process Group legacy eliminado para evitar ruido visual en la UI de NiFi.
 
 ## Operacion del dashboard (estado final)
 
@@ -377,6 +416,11 @@ El dashboard opera con dos contextos de filtro independientes:
    - filtros: `Origen`, `Destino`, `Perfil`.
 
 Un cambio de filtro en un bloque no debe alterar el otro.
+
+Adicionalmente, en el estado actual:
+
+1. Los selectores de origen/destino en ambas vistas se cargan ordenados alfabeticamente.
+2. Todas las tablas del dashboard admiten ordenacion por columna.
 
 ### Reglas de filtro en Tiempo Real
 

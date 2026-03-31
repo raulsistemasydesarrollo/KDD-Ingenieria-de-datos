@@ -10,6 +10,13 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 - Persistencia streaming en Hive de eventos enriquecidos: `transport_analytics.enriched_events_streaming`.
 - Nuevo fallback Parquet de streaming: `/data/curated/enriched_events_streaming`.
+- Persistencia de snapshots de insights en Cassandra: `transport.network_insights_snapshots`.
+- Nuevo endpoint de historico de insights: `/api/network/insights/history`.
+- Nuevo launcher Spark: `spark-app/run-insights-sync.sh`.
+- Nuevas tablas Hive de consolidacion de insights:
+  - `transport_analytics.network_insights_snapshots_hive`
+  - `transport_analytics.network_insights_hourly_trends`
+- Script `scripts/rebuild_graph_edges_by_proximity.py` para regenerar aristas por cercania geografica con reglas de negocio.
 
 ### Changed
 
@@ -18,10 +25,20 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - Flujo GPS NiFi actualizado con renombrado unico por split (`${filename}_${fragment.index}_${UUID()}.jsonl`) para evitar sobrescrituras en `raw-archive/gps`.
 - Parseo de timestamps ISO UTC robusto en Spark streaming para GPS y clima.
 - Documentacion tecnica y operativa actualizada para reflejar el estado real de `v9` y las nuevas salidas streaming.
+- Dashboard actualizado:
+  - tablas ordenables por columna,
+  - selectores de origen/destino ordenados alfabeticamente,
+  - etiquetas de nodos RT en codigo de 3 letras y semitransparentes.
+- Red logistico-geografica consolidada:
+  - 15 nodos (`ACO, ALM, BCN, BIO, CAC, GIJ, LIS, MAD, MAL, MUR, OPO, SEV, VAL, VLL, ZAR`),
+  - 15 vehiculos (`14` activos y `1` en mantenimiento),
+  - restricciones de conectividad por corredor y atajos prohibidos.
 
 ### Fixed
 
 - Correccion de sobrescritura de ficheros GPS en `nifi/raw-archive/gps` al archivar flowfiles de `SplitText`.
+- Correccion de `UNKNOWN` en congestion de insights cuando no hay muestras live (normalizacion a `low/medium/high`).
+- Correccion en computo de insights por perfil (`KeyError: profile_minutes_sum`).
 
 ### Removed
 

@@ -29,7 +29,7 @@ Implementacion de una plataforma Big Data orientada a logistica y transporte sig
 Indice maestro de entrega:
 
 - [docs/ENTREGA.md](./docs/ENTREGA.md)
-- [docs/architecture.md](./docs/architecture.md) (incluye diagrama [docs/architecture-diagram.svg](./docs/architecture-diagram.svg))
+- [docs/architecture.md](./docs/architecture.md) (incluye diagrama [docs/architecture-diagram.png](./docs/architecture-diagram.png))
 - [CHANGELOG.md](./CHANGELOG.md) (historial consolidado de cambios)
 
 ## Arranque rapido
@@ -56,6 +56,12 @@ Indice maestro de entrega:
 
    ```bash
    docker compose exec spark-client bash /opt/spark-app/run-batch.sh
+   ```
+
+   Opcional (sincronizar snapshots de insights Cassandra -> Hive):
+
+   ```bash
+   sg docker -c "docker compose exec -T spark-client /opt/spark-app/run-insights-sync.sh"
    ```
 
 5. Ejecutar el job de streaming:
@@ -303,6 +309,36 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 ```bash
 ./scripts/cleanup_nifi_legacy_pgs.py
 ```
+
+## Cambios recientes (31/03/2026)
+
+- Dashboard:
+  - Etiquetas de nodos en mapa de Tiempo Real normalizadas a codigo de 3 letras (igual que el mapa logistico).
+  - Etiquetas de nodos de Tiempo Real con transparencia para no tapar vehiculos.
+  - Selectores `Origen/Destino` (RT y Red Logistica) ordenados alfabeticamente.
+  - Todas las tablas del dashboard ordenables por columna (click en cabeceras).
+  - Tabla bajo mapa logistico enfocada en origen/destino seleccionados (o global en `TODOS`).
+  - Nuevos insights live de red (cuellos de botella, nodos criticos e historico).
+  - Resolucion de congestion `UNKNOWN` a `low/medium/high` cuando no hay muestras live.
+- Backend dashboard / Spark:
+  - Nuevos campos live por arista (`effective_avg_delay_minutes`, `live_avg_delay_minutes`, `live_sample_count`, `congestion_level`) y resumen `live_edge_summary`.
+  - Persistencia de snapshots de insights en Cassandra (`transport.network_insights_snapshots`).
+  - Endpoint historico de insights: `/api/network/insights/history`.
+  - Nuevo modo Spark `insights-sync` + launcher `spark-app/run-insights-sync.sh` para consolidar en Hive:
+    - `transport_analytics.network_insights_snapshots_hive`
+    - `transport_analytics.network_insights_hourly_trends`
+- Red y simulacion:
+  - Red actual ampliada a 15 nodos y flota de 15 vehiculos (14 activos + 1 en mantenimiento).
+  - Script de regeneracion de aristas por cercania geografica:
+    - `python3 scripts/rebuild_graph_edges_by_proximity.py --k 4`
+  - Reglas de negocio aplicadas en la red:
+    - prohibidas directas: `BCN-MUR`, `ACO-BIO`, `VAL-ALM`
+    - obligatorias: `BCN-VAL`, `VAL-MUR`, `ACO-GIJ`, `GIJ-BIO`, `MAD-SEV`, `MAD-MAL`
+    - corredor sur sin atajos: `CAC-SEV-MAL-ALM-MUR`
+- Operativa:
+  - Si aparece `permission denied` al lanzar `run-insights-sync.sh`, ejecutar:
+    - `chmod +x spark-app/run-insights-sync.sh`
+    - reconstruir/recrear `spark-client` para refrescar permisos en imagen/contenedor.
 
 ## Cambios recientes (30/03/2026)
 

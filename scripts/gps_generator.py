@@ -44,6 +44,10 @@ CITY_COORDS = {
     "ACO": (43.3623, -8.4115),
     "ALM": (36.8340, -2.4637),
     "VLL": (41.6523, -4.7245),
+    "MAL": (36.7213, -4.4214),
+    "MUR": (37.9922, -1.1307),
+    "GIJ": (43.5322, -5.6611),
+    "CAC": (39.4765, -6.3722),
 }
 WAREHOUSES = list(CITY_COORDS.keys())
 DEFAULT_VEHICLES = [f"V{i}" for i in range(1, 14)]

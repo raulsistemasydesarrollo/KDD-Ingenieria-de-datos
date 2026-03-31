@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Especificacion funcional del dashboard`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.1`
+- Fecha: `31/03/2026`
 
 ## Indice
 
@@ -26,6 +26,10 @@ El dashboard muestra dos vistas operativas **desacopladas** (independientes), ma
 
 - Operacion en tiempo real de vehiculos (mapa y paneles de flota).
 - Analisis de red logistica (mapa de red y tablas de rutas/impacto).
+
+## Captura actual
+
+![Dashboard logistica (21 vehiculos activos)](./dashboard.png)
 
 ## Fuentes de datos del dashboard
 
@@ -61,10 +65,13 @@ Devuelve:
 - Marcadores de almacen:
   - naranja: criticidad `high`
   - azul: criticidad `medium`
+  - etiqueta semitransparente para no ocultar vehiculos.
+- Etiquetas de nodo mostradas en codigo de 3 letras (ej. `MAD`, `BCN`, `GIJ`), alineadas con la vista de red.
 
 ### Filtros de Tiempo Real (solo vista izquierda)
 
 - `Origen RT` y `Destino RT` filtran **solo** la vista de Operacion en Tiempo Real.
+- Listado de `Origen RT` / `Destino RT` ordenado alfabeticamente.
 - `TODOS -> TODOS`: sin filtro (vista global de flota).
 - `TODOS -> X`: muestra vehiculos cuya ruta reportada termina en `X`.
 - `X -> TODOS`: muestra vehiculos cuya ruta reportada comienza en `X`.
@@ -77,6 +84,7 @@ Devuelve:
 - Aristas: conexiones del grafo (`data/graph/edges.csv`).
 - Arista roja: tramo perteneciente a la ruta calculada para el origen/destino seleccionados.
 - Color de arista base: severidad meteorologica agregada (low/medium/high).
+- Selectores `Origen` / `Destino` ordenados alfabeticamente.
 - Delay de arista en tabla/mapa: valor **efectivo** (`effective_avg_delay_minutes`) que mezcla:
   - delay estatico del grafo (`avg_delay_minutes`),
   - telemetria viva de flota (`planned_origin/planned_destination`, delay y velocidad recientes).
@@ -95,6 +103,8 @@ Muestra:
 - Tiempo estimado final.
 - Factor meteorologico aplicado.
 - Numero de aristas de la ruta con telemetria live usada en el calculo.
+- Nota: el contador `Aristas live` refleja solo tramos de la **ruta seleccionada** con muestras live (`live_sample_count > 0`), no el total del grafo.
+- Todas las tablas del dashboard son ordenables por columna (asc/desc) con click en cabecera.
 
 ### Insights de red (live)
 
@@ -108,6 +118,7 @@ Filtros disponibles:
 - `Perfil insights`: recalcula score de impacto con los costes del perfil (`balanced`, `fastest`, `resilient`).
 - `Congestion minima`: filtra el ranking para mostrar solo tramos/nodos afectados por el nivel indicado (`all`, `low`, `medium`, `high`).
 - `Historico insights`: tabla de snapshots recientes persistidos en Cassandra por perfil/congestion.
+- Si un tramo llega sin muestras live (`live_sample_count=0`) y congestion `UNKNOWN`, se normaliza a `low/medium/high` con heuristica de delay/distancia para mantener consistencia visual.
 
 Endpoint historico:
 
@@ -127,6 +138,26 @@ Tablas resultado:
 
 - `transport_analytics.network_insights_snapshots_hive` (detalle de snapshots).
 - `transport_analytics.network_insights_hourly_trends` (top tramo y top nodo por hora/perfil/congestion).
+
+## Grafo por cercania geografica (k vecinos)
+
+Para regenerar `data/graph/edges.csv` con una red "casi completa" por cercania:
+
+```bash
+python3 scripts/rebuild_graph_edges_by_proximity.py --k 4
+```
+
+Alternativa con variable de entorno:
+
+```bash
+GRAPH_K_NEIGHBORS=5 python3 scripts/rebuild_graph_edges_by_proximity.py
+```
+
+Reglas de negocio que aplica el script al regenerar aristas:
+
+- Conexiones directas prohibidas: `BCN-MUR`, `ACO-BIO`, `VAL-ALM`.
+- Conexiones obligatorias: `BCN-VAL`, `VAL-MUR`, `ACO-GIJ`, `GIJ-BIO`, `MAD-SEV`, `MAD-MAL`.
+- Corredor sur sin atajos directos: `CAC-SEV-MAL-ALM-MUR`.
 
 ### Filtros de Analisis Logistico (solo vista derecha)
 
@@ -161,7 +192,12 @@ Con esto se evita que persistan ETAs irreales tras saltos de posicion, cambios d
 
 ## Datos y nodos actuales
 
-Red actual: `MAD, BCN, VAL, SEV, LIS, OPO, ZAR, BIO, ACO, ALM, VLL`.
+Red actual (15 nodos): `ACO, ALM, BCN, BIO, CAC, GIJ, LIS, MAD, MAL, MUR, OPO, SEV, VAL, VLL, ZAR`.
+
+Flota actual (15 vehiculos):
+
+- Activos: `14`
+- Mantenimiento: `1` (`TRUCK-004`)
 
 Archivos fuente:
 

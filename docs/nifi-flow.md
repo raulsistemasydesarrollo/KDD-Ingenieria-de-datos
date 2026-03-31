@@ -19,6 +19,10 @@ Crear una ingesta dual hacia Kafka y HDFS:
 
 ## Flujo minimo (GPS)
 
+Captura del subflujo desplegado en NiFi:
+
+![NiFi GPS ingestion](./GPS_ingestion.png)
+
 1. `ListFile`
    - Directorio: `/opt/nifi/nifi-current/input`
    - Filtro: `*.jsonl`
@@ -50,6 +54,10 @@ Crear una ingesta dual hacia Kafka y HDFS:
   - `/opt/nifi/nifi-current/raw-archive/failures/weather`
 
 ## Ingesta API meteorologica (requisito del enunciado)
+
+Captura del subflujo de meteorologia desplegado en NiFi:
+
+![NiFi WEATHER ingestion](./WEATHER_ingestion.png)
 
 Flujo adicional recomendado para clima:
 

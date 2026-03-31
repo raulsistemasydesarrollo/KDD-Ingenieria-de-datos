@@ -221,6 +221,11 @@ button {
   max-height: 160px;
 }
 
+.vehicle-table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -331,11 +336,20 @@ th.sortable-th.sort-desc::after {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
+.warehouse-label {
+  background: rgba(10, 16, 24, 0.58);
+  backdrop-filter: blur(1px);
+}
+
 body[data-theme="light"] .warehouse-label,
 body[data-theme="light"] .network-label {
   background: rgba(255, 255, 255, 0.95);
   border-color: #c9d7e6;
   color: #213447;
+}
+
+body[data-theme="light"] .warehouse-label {
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .warehouse-label::before,

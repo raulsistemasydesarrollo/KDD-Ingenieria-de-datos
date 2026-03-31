@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Resumen ejecutivo para memoria`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.1`
+- Fecha: `31/03/2026`
 
 ## Indice
 
@@ -62,6 +62,7 @@ El sistema esta empaquetado en Docker Compose, con scripts de arranque, validaci
 
 - Hive centraliza el catalogo analitico (batch y streaming).
 - Cassandra mantiene el ultimo estado de cada vehiculo para consulta rapida.
+- Cassandra almacena snapshots de insights de red para historico.
 - HDFS mantiene capa raw y curated.
 
 ### Explotacion
@@ -83,6 +84,8 @@ El sistema esta empaquetado en Docker Compose, con scripts de arranque, validaci
 5. Representacion tabular de rutas y metricas (distancia, tiempos, penalizacion clima, factor aplicado).
 6. Modo oscuro por defecto y cambio claro/oscuro en frontend.
 7. Filtros RT parciales y completos (`TODOS->X`, `X->TODOS`, `X->Y`) con limpieza de seleccion fuera de filtro.
+8. Insights live de red (cuellos de botella + nodos criticos + historico).
+9. Tablas ordenables y selectores alfabeticos en ambas vistas.
 
 ## 4. Robustez y operaciones
 
@@ -104,6 +107,8 @@ Se incorporaron mejoras de estabilidad relevantes para entrega:
 - Dashboard:
   - Endpoint de diagnostico de fuentes: `/api/debug/sources`
   - Fuente vehiculos: Cassandra (primaria), `nifi/input` (fallback).
+  - Endpoint de historico insights: `/api/network/insights/history`.
+  - Red consolidada en 15 nodos y flota de 15 vehiculos (14 activos + 1 mantenimiento).
 
 ## 6. Entregables documentales
 

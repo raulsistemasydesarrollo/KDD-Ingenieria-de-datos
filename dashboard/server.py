@@ -47,6 +47,7 @@ WEATHER_DIR = PROJECT_ROOT / "nifi" / "raw-archive" / "weather"
 GRAPH_EDGES_PATH = PROJECT_ROOT / "data" / "graph" / "edges.csv"
 GRAPH_VERTICES_PATH = PROJECT_ROOT / "data" / "graph" / "vertices.csv"
 WAREHOUSES_PATH = PROJECT_ROOT / "data" / "master" / "warehouses.csv"
+MASTER_VEHICLES_PATH = PROJECT_ROOT / "data" / "master" / "vehicles.csv"
 CASSANDRA_HOST = os.getenv("CASSANDRA_HOST", "cassandra")
 CASSANDRA_PORT = int(os.getenv("CASSANDRA_PORT", "9042"))
 CASSANDRA_KEYSPACE = os.getenv("CASSANDRA_KEYSPACE", "transport")
@@ -340,6 +341,31 @@ def normalize_warehouse_id(raw_warehouse_id, aliases):
     if raw_warehouse_id is None:
         return None
     return aliases.get(raw_warehouse_id, raw_warehouse_id)
+
+
+def load_allowed_vehicle_ids():
+    # IDs de flota validos para UI (solo status activo).
+    ids = set()
+    if not MASTER_VEHICLES_PATH.exists():
+        return ids
+    try:
+        with MASTER_VEHICLES_PATH.open("r", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                vid = str(row.get("vehicle_id") or "").strip()
+                status = str(row.get("status") or "").strip().lower()
+                if not vid or status != "active":
+                    continue
+                ids.add(vid)
+    except OSError:
+        return set()
+    return ids
+
+
+def filter_rows_by_vehicle_ids(rows, allowed_ids):
+    if not rows or not allowed_ids:
+        return rows
+    return [row for row in rows if str(row.get("vehicle_id") or "") in allowed_ids]
 
 
 def edge_weight(edge, profile: str, weather_factor: float):
@@ -957,8 +983,11 @@ def load_vehicle_latest_preferred(events, warehouse_aliases, limit: int = 200):
     # - Cassandra si hay datos frescos.
     # - Fallback nifi/input si Cassandra va atras.
     # - Sincronizacion de fallback hacia Cassandra para converger fuente principal.
+    allowed_ids = load_allowed_vehicle_ids()
     cassandra_rows, cassandra_meta = load_vehicle_latest_from_cassandra_with_meta(limit=limit)
     fallback_rows = build_vehicle_latest(events, warehouse_aliases, limit=limit)
+    cassandra_rows = filter_rows_by_vehicle_ids(cassandra_rows, allowed_ids)
+    fallback_rows = filter_rows_by_vehicle_ids(fallback_rows, allowed_ids)
 
     def _latest_vehicle_dt(items):
         parsed = [parse_iso_utc(i.get("event_time")) for i in items if i.get("event_time")]

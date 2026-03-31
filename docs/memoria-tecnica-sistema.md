@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Memoria tecnica del sistema`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.1`
+- Fecha: `31/03/2026`
 
 ## Indice
 
@@ -59,11 +59,11 @@ Componentes principales del `docker-compose`:
 
 ### Diagrama de arquitectura
 
-![Diagrama de arquitectura del proyecto](./architecture-diagram.svg)
+![Diagrama de arquitectura del proyecto](./architecture-diagram.png)
 
 Archivo fuente del diagrama:
 
-- `docs/architecture-diagram.svg`
+- `docs/architecture-diagram.png`
 
 ## 3. Flujo de datos end-to-end
 
@@ -103,6 +103,12 @@ Archivo fuente del diagrama:
 ## 4. NiFi en detalle
 
 ## 4.1 Estructura visual desplegada
+
+Capturas de referencia de los subflujos:
+
+![NiFi GPS ingestion](./GPS_ingestion.png)
+
+![NiFi WEATHER ingestion](./WEATHER_ingestion.png)
 
 Bootstrap actual (`scripts/bootstrap_nifi_flow.sh`) crea:
 
@@ -227,11 +233,13 @@ Modos:
 
 - `batch` (job historico + grafos + ML)
 - `streaming` (consumo continuo de Kafka)
+- `insights-sync` (consolidacion de snapshots de insights Cassandra -> Hive)
 
 Lanzadores:
 
 - `spark-app/run-batch.sh`
 - `spark-app/run-streaming.sh`
+- `spark-app/run-insights-sync.sh`
 
 Paquetes Spark usados:
 
@@ -373,6 +381,8 @@ Fallback heuristico (si dataset pequeno):
 - `transport_analytics.delay_metrics_streaming`
 - `transport_analytics.enriched_events_streaming`
 - (opcional segun entorno) `transport_analytics.weather_observations_streaming`
+- `transport_analytics.network_insights_snapshots_hive`
+- `transport_analytics.network_insights_hourly_trends`
 
 ## 7.3 Vistas en hora Madrid
 
@@ -388,9 +398,11 @@ Nota operativa:
 
 ## 8. Cassandra
 
-Keyspace/tabla:
+Keyspace/tablas:
 
 - `transport.vehicle_latest_state`
+- `transport.weather_observations_recent`
+- `transport.network_insights_snapshots`
 
 Uso:
 
@@ -403,6 +415,10 @@ Campos:
 - `latitude`, `longitude`.
 
 ## 9. Airflow en detalle
+
+Captura de referencia del entorno Airflow:
+
+![Airflow](./airflow.png)
 
 DAGs:
 
@@ -430,6 +446,10 @@ Alertas:
 
 ## 10. Dashboard
 
+Captura de estado operativo del dashboard:
+
+![Dashboard logistica (21 vehiculos activos)](./dashboard.png)
+
 Backend:
 
 - `dashboard/server.py` (HTTP server multihilo).
@@ -449,6 +469,7 @@ API principal:
 - `/api/weather/latest`
 - `/api/network/graph`
 - `/api/network/best-route`
+- `/api/network/insights/history`
 - `/api/debug/sources` (diagnostico de fuentes activas y fallback)
 
 Motor de ruta:
@@ -461,6 +482,7 @@ Frontend:
 - modo oscuro por defecto (toggle claro/oscuro),
 - mapa tiempo real y mapa de red logistica,
 - tabla de rutas con ETA y desglose de tiempos.
+- tablas ordenables por columna.
 - filtros desacoplados por vista:
   - Tiempo Real: `Origen RT` / `Destino RT` (solo columna izquierda),
   - Red Logistica: `Origen` / `Destino` / `Perfil` (solo columna derecha).
@@ -471,6 +493,8 @@ Frontend:
   - no ruta concreta con origen=destino en bloque logistico,
   - limpieza automatica de seleccion de vehiculo si deja de cumplir filtro RT,
   - priorizacion de `planned_origin/planned_destination` para evitar rutas `X->X` espurias y proyecciones incoherentes.
+  - selectores de origen/destino ordenados alfabeticamente en ambas vistas,
+  - etiquetas de nodo RT en formato 3 letras y semitransparentes para no ocultar vehiculos.
 
 ## 11. Orquestacion de arranque y reset
 

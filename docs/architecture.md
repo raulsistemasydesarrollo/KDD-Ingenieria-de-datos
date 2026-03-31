@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Arquitectura tecnica actual`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.1`
+- Fecha: `31/03/2026`
 
 ## Indice
 
@@ -30,11 +30,11 @@ La plataforma implementa el ciclo KDD completo en local con Docker Compose:
 
 ## 2. Diagrama de arquitectura
 
-![Diagrama de arquitectura](./architecture-diagram.svg)
+![Diagrama de arquitectura](./architecture-diagram.png)
 
 Archivo de imagen:
 
-- `docs/architecture-diagram.svg`
+- `docs/architecture-diagram.png`
 
 ## 3. Componentes y responsabilidades
 
@@ -65,6 +65,7 @@ Archivo de imagen:
   - Batch: enriquecimiento, agregaciones, grafos, shortest paths y ML.
   - Streaming: GPS y clima desde Kafka con watermark + deduplicacion.
   - Persistencia en Hive y Cassandra (con fallback Parquet curated), incluyendo `transport_analytics.enriched_events_streaming`.
+  - Modo `insights-sync` para consolidar snapshots de insights de red en Hive.
 
 - `Hive`
   - Almacen analitico SQL (`transport_analytics`).
@@ -74,6 +75,7 @@ Archivo de imagen:
   - Estado de baja latencia:
     - `transport.vehicle_latest_state`
     - `transport.weather_observations_recent`
+    - `transport.network_insights_snapshots`
 
 - `Airflow`
   - `kdd_hourly_healthcheck`
@@ -86,6 +88,7 @@ Archivo de imagen:
   - Fuente principal: Cassandra.
   - Fallback controlado a ficheros NiFi para vehiculos/clima.
   - Filtros desacoplados por vista.
+  - Insights live de red y resumen de aristas con telemetria (`live_edge_summary`).
 
 ## 4. Flujo de datos end-to-end
 

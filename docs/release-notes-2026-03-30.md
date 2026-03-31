@@ -20,6 +20,47 @@
 
 Este documento consolida los cambios funcionales y operativos aplicados durante la iteracion del 30 de marzo de 2026.
 
+## Addendum - 31/03/2026
+
+Cambios adicionales aplicados tras la iteracion base:
+
+### Dashboard
+
+- Etiquetas de nodos en Tiempo Real normalizadas a codigos de 3 letras (mismo criterio que Red Logistica).
+- Etiquetas de nodo en Tiempo Real con transparencia para no ocultar vehiculos.
+- Selectores de origen/destino (RT y red) ordenados alfabeticamente.
+- Todas las tablas del dashboard ahora son ordenables por columnas.
+- Tabla de datos bajo el mapa logistico ajustada para reflejar origen/destino seleccionados.
+- Leyendas refinadas en mapas de Tiempo Real y Red Logistica.
+
+### Insights de red
+
+- Nuevo bloque `Insights de red (live)` con:
+  - ranking de cuellos de botella,
+  - ranking de nodos criticos,
+  - historico de snapshots.
+- Persistencia de snapshots en Cassandra (`transport.network_insights_snapshots`).
+- Endpoint historico: `/api/network/insights/history`.
+- Normalizacion de congestion `UNKNOWN` a niveles operativos (`low/medium/high`) cuando faltan muestras live.
+
+### Spark / Hive
+
+- Nuevo launcher `spark-app/run-insights-sync.sh` para ejecutar modo `insights-sync`.
+- Consolidacion Cassandra -> Hive:
+  - `transport_analytics.network_insights_snapshots_hive`
+  - `transport_analytics.network_insights_hourly_trends`
+
+### Red y simulacion
+
+- Red actual consolidada en 15 nodos:
+  - `ACO, ALM, BCN, BIO, CAC, GIJ, LIS, MAD, MAL, MUR, OPO, SEV, VAL, VLL, ZAR`
+- Flota actual consolidada en 15 vehiculos (`14` activos + `1` mantenimiento).
+- Regeneracion de aristas por proximidad con `scripts/rebuild_graph_edges_by_proximity.py`.
+- Reglas de negocio en la topologia:
+  - prohibidas: `BCN-MUR`, `ACO-BIO`, `VAL-ALM`,
+  - obligatorias: `BCN-VAL`, `VAL-MUR`, `ACO-GIJ`, `GIJ-BIO`, `MAD-SEV`, `MAD-MAL`,
+  - corredor sur sin atajos: `CAC-SEV-MAL-ALM-MUR`.
+
 ## Resumen ejecutivo
 
 Se estabilizo la plataforma end-to-end para demo operativa en logistica:

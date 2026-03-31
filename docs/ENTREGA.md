@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Indice maestro de entrega`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.1`
+- Fecha: `31/03/2026`
 
 ## 1. Documentos principales
 
@@ -23,7 +23,7 @@
    - [README.md](../README.md)
 7. Arquitectura tecnica + diagrama:
    - [docs/architecture.md](./architecture.md)
-   - [docs/architecture-diagram.svg](./architecture-diagram.svg)
+   - [docs/architecture-diagram.png](./architecture-diagram.png)
 8. Guia de anotacion de codigo:
    - [docs/CODE-ANNOTATION-GUIDE.md](./CODE-ANNOTATION-GUIDE.md)
 9. Changelog consolidado:
@@ -40,6 +40,8 @@
    - Red Logistica con filtros propios (`Origen`, `Destino`, `Perfil`).
 4. Rutas y proyecciones de vehiculo coherentes con plan de trayecto (`planned_origin`, `planned_destination`).
 5. Estado operativo con fuentes primarias en Cassandra y fallback controlado.
+6. Insights de red live con historico persistido en Cassandra y consolidacion en Hive.
+7. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
 
 ## 3. Checklist de revision previa a entrega
 
@@ -58,6 +60,11 @@
 - [ ] Tabla de eventos enriquecidos streaming visible y con datos:
   - `transport_analytics.enriched_events_streaming`.
 - [ ] Cassandra con estado de flota y observaciones meteo recientes.
+- [ ] Tabla Cassandra de snapshots de insights con datos:
+  - `transport.network_insights_snapshots`.
+- [ ] Tablas Hive de insights consolidadas con datos:
+  - `transport_analytics.network_insights_snapshots_hive`
+  - `transport_analytics.network_insights_hourly_trends`.
 
 ### 3.3 Dashboard
 
@@ -67,6 +74,9 @@
 - [ ] `TODOS -> TODOS` funciona en ambos contextos.
 - [ ] No aparecen rutas espurias tipo `X -> X` en vehiculos.
 - [ ] Panel de vehiculo muestra ruta, rumbo, siguiente nodo y ETA consistentes.
+- [ ] Etiquetas de nodo RT en formato 3 letras y semitransparentes.
+- [ ] Selectores origen/destino ordenados alfabeticamente.
+- [ ] Tablas del dashboard ordenables por columna.
 
 ### 3.4 Documentacion
 
