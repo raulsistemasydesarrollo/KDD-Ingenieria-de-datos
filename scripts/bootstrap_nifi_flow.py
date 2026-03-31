@@ -346,7 +346,12 @@ def main():
     update_processor(
         token,
         p["kafka_raw"],
-        properties={"Kafka Connection Service": kafka_service_id, "Topic Name": "transport.raw"},
+        properties={
+            "Kafka Connection Service": kafka_service_id,
+            "Topic Name": "transport.raw",
+            "Transactions Enabled": "false",
+            "acks": "1",
+        },
     )
     update_processor(
         token,
@@ -356,7 +361,12 @@ def main():
     update_processor(
         token,
         p["kafka_filtered"],
-        properties={"Kafka Connection Service": kafka_service_id, "Topic Name": "transport.filtered"},
+        properties={
+            "Kafka Connection Service": kafka_service_id,
+            "Topic Name": "transport.filtered",
+            "Transactions Enabled": "false",
+            "acks": "1",
+        },
     )
     update_processor(
         token,
@@ -408,7 +418,16 @@ def main():
             "Include Core Attributes": "false",
         },
     )
-    update_processor(token, p["kafka_weather_raw"], properties={"Kafka Connection Service": kafka_service_id, "Topic Name": "transport.weather.raw"})
+    update_processor(
+        token,
+        p["kafka_weather_raw"],
+        properties={
+            "Kafka Connection Service": kafka_service_id,
+            "Topic Name": "transport.weather.raw",
+            "Transactions Enabled": "false",
+            "acks": "1",
+        },
+    )
     update_processor(
         token,
         p["archive_weather_raw"],
@@ -417,7 +436,12 @@ def main():
     update_processor(
         token,
         p["kafka_weather_filtered"],
-        properties={"Kafka Connection Service": kafka_service_id, "Topic Name": "transport.weather.filtered"},
+        properties={
+            "Kafka Connection Service": kafka_service_id,
+            "Topic Name": "transport.weather.filtered",
+            "Transactions Enabled": "false",
+            "acks": "1",
+        },
     )
     update_processor(
         token,

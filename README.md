@@ -28,9 +28,9 @@ Implementacion de una plataforma Big Data orientada a logistica y transporte sig
 
 Indice maestro de entrega:
 
-- `docs/ENTREGA.md`
-- `docs/architecture.md` (incluye diagrama `docs/architecture-diagram.svg`)
-- `CHANGELOG.md` (historial consolidado de cambios)
+- [docs/ENTREGA.md](./docs/ENTREGA.md)
+- [docs/architecture.md](./docs/architecture.md) (incluye diagrama [docs/architecture-diagram.svg](./docs/architecture-diagram.svg))
+- [CHANGELOG.md](./CHANGELOG.md) (historial consolidado de cambios)
 
 ## Arranque rapido
 

@@ -22,7 +22,8 @@ services:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
       interval: 20s
       timeout: 10s
-      retries: 10
+      retries: 20
+      start_period: 90s
 
   nifi:
     image: apache/nifi:2.7.0
