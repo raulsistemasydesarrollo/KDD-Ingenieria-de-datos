@@ -21,6 +21,7 @@ Endpoints principales:
 """
 
 import csv
+import heapq
 import json
 import math
 import os
@@ -344,7 +345,7 @@ def normalize_warehouse_id(raw_warehouse_id, aliases):
 
 
 def load_allowed_vehicle_ids():
-    # IDs de flota validos para UI (solo status activo).
+    # IDs de flota validos para UI (activos + mantenimiento) para evitar legacy.
     ids = set()
     if not MASTER_VEHICLES_PATH.exists():
         return ids
@@ -353,13 +354,30 @@ def load_allowed_vehicle_ids():
             reader = csv.DictReader(handle)
             for row in reader:
                 vid = str(row.get("vehicle_id") or "").strip()
-                status = str(row.get("status") or "").strip().lower()
-                if not vid or status != "active":
+                if not vid:
                     continue
                 ids.add(vid)
     except OSError:
         return set()
     return ids
+
+
+def load_vehicle_status_map():
+    status_map = {}
+    if not MASTER_VEHICLES_PATH.exists():
+        return status_map
+    try:
+        with MASTER_VEHICLES_PATH.open("r", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                vid = str(row.get("vehicle_id") or "").strip()
+                status = str(row.get("status") or "").strip().lower() or "unknown"
+                if not vid:
+                    continue
+                status_map[vid] = status
+    except OSError:
+        return {}
+    return status_map
 
 
 def filter_rows_by_vehicle_ids(rows, allowed_ids):
@@ -371,19 +389,54 @@ def filter_rows_by_vehicle_ids(rows, allowed_ids):
 def edge_weight(edge, profile: str, weather_factor: float):
     # Calcula coste de arista para routing segun perfil y clima.
     # Retorna (total, base, penalizacion_meteo).
+    profile = str(profile or "balanced").strip().lower()
+    if profile not in {"balanced", "fastest", "resilient", "eco", "low_risk"}:
+        profile = "balanced"
     distance = edge["distance_km"]
     delay = float(edge.get("effective_avg_delay_minutes", edge.get("avg_delay_minutes", 0.0)))
+    live_samples = int(edge.get("live_sample_count") or 0)
+    congestion = str(edge.get("congestion_level") or "unknown").strip().lower()
+    congestion_weight = 1.1
+    if congestion == "medium":
+        congestion_weight = 1.25
+    elif congestion == "high":
+        congestion_weight = 1.6
+    elif congestion == "low":
+        congestion_weight = 1.0
 
     if profile == "fastest":
-        base = (distance / 88.0) * 60.0 + (delay * 0.9)
-        penalty = delay * weather_factor * 1.4
+        # Prioriza tiempo puro y tolera peor climatologia/congestion.
+        base = (distance / 100.0) * 60.0 + (delay * 0.55)
+        penalty = (delay * weather_factor * 0.8) + ((congestion_weight - 1.0) * 4.0)
         return base + penalty, base, penalty
     if profile == "resilient":
-        base = (distance / 70.0) * 60.0 + (delay * 1.15)
-        penalty = delay * weather_factor * 0.7
+        # Penaliza fuerte la climatologia y la congestion para evitar tramos "fragiles".
+        base = (distance / 62.0) * 60.0 + (delay * 1.65)
+        penalty = (
+            (delay * weather_factor * 2.6)
+            + ((congestion_weight - 1.0) * 14.0)
+            + (max(0.0, delay - 8.0) ** 1.2) * 0.9
+        )
         return base + penalty, base, penalty
-    base = (distance / 75.0) * 60.0 + delay
-    penalty = delay * weather_factor * 1.9
+    if profile == "eco":
+        # Favorece tramos eficientes (menos km, menos stop&go, menos delay).
+        base = (distance / 74.0) * 60.0 + (delay * 1.2) + (distance * 0.018)
+        penalty = (delay * weather_factor * 1.2) + ((congestion_weight - 1.0) * 10.0) + (max(0.0, delay - 6.0) ** 1.12) * 0.55
+        return base + penalty, base, penalty
+    if profile == "low_risk":
+        # Busca ETA estable: evita clima adverso, congestion y tramos con poca telemetria live.
+        telemetry_risk = 1.9 if live_samples <= 0 else 1.0 / (1.0 + min(6.0, live_samples) * 0.65)
+        base = (distance / 69.0) * 60.0 + (delay * 1.45)
+        penalty = (
+            (delay * weather_factor * 3.05)
+            + ((congestion_weight - 1.0) * 17.0)
+            + (max(0.0, delay - 7.0) ** 1.18) * 1.05
+            + telemetry_risk * 3.0
+        )
+        return base + penalty, base, penalty
+    # Balanceado: compromiso entre velocidad y robustez.
+    base = (distance / 76.0) * 60.0 + delay
+    penalty = (delay * weather_factor * 1.6) + ((congestion_weight - 1.0) * 7.0)
     return base + penalty, base, penalty
 
 
@@ -398,10 +451,16 @@ def route_weather_factor(base_weather_factor: float, path_edges):
     return min(base_weather_factor * multiplier, 3.2)
 
 
-def dijkstra(vertices, edges, source, target, profile, weather_factor):
-    # Motor de ruta minima: construye camino y metricas agregadas del trayecto.
+def build_weighted_graph(edges, profile: str, weather_factor: float, blocked_nodes=None):
+    blocked = {str(node) for node in (blocked_nodes or []) if node}
     graph = defaultdict(list)
     for edge in edges:
+        src = str(edge.get("src") or "")
+        dst = str(edge.get("dst") or "")
+        if not src or not dst:
+            continue
+        if src in blocked or dst in blocked:
+            continue
         total_weight, base_weight, weather_penalty = edge_weight(edge, profile, weather_factor)
         edge_with_costs = {
             **edge,
@@ -409,19 +468,103 @@ def dijkstra(vertices, edges, source, target, profile, weather_factor):
             "weather_penalty_minutes": round(weather_penalty, 2),
             "total_minutes": round(total_weight, 2),
         }
-        graph[edge["src"]].append((edge["dst"], total_weight, edge_with_costs))
+        graph[src].append((dst, total_weight, edge_with_costs))
         reverse_edge = {
-            "src": edge["dst"],
-            "dst": edge["src"],
-            "distance_km": edge["distance_km"],
-            "avg_delay_minutes": edge["avg_delay_minutes"],
+            "src": dst,
+            "dst": src,
+            "distance_km": edge.get("distance_km"),
+            "avg_delay_minutes": edge.get("avg_delay_minutes"),
+            "effective_avg_delay_minutes": edge.get("effective_avg_delay_minutes"),
+            "live_avg_delay_minutes": edge.get("live_avg_delay_minutes"),
+            "live_avg_speed_kmh": edge.get("live_avg_speed_kmh"),
+            "live_sample_count": edge.get("live_sample_count"),
+            "congestion_level": edge.get("congestion_level"),
             "base_minutes": round(base_weight, 2),
             "weather_penalty_minutes": round(weather_penalty, 2),
             "total_minutes": round(total_weight, 2),
         }
-        graph[reverse_edge["src"]].append((reverse_edge["dst"], total_weight, reverse_edge))
+        graph[dst].append((src, total_weight, reverse_edge))
+    return graph
 
-    dist = {node["id"]: math.inf for node in vertices}
+
+def build_route_payload(profile, path_nodes, path_edges, weather_factor, avoided_nodes=None, rank=1):
+    total_distance = sum(float(e.get("distance_km") or 0.0) for e in path_edges)
+    total_delay = sum(float(e.get("avg_delay_minutes") or 0.0) for e in path_edges)
+    total_base = round(sum(float(e.get("base_minutes") or 0.0) for e in path_edges), 2)
+    total_weather_penalty = round(sum(float(e.get("weather_penalty_minutes") or 0.0) for e in path_edges), 2)
+    effective_weather_factor = route_weather_factor(weather_factor, path_edges)
+    if weather_factor > 0:
+        scale = effective_weather_factor / weather_factor
+        total_weather_penalty = round(total_weather_penalty * scale, 2)
+    eta_minutes = round(total_base + total_weather_penalty, 2)
+    return {
+        "rank": int(rank),
+        "profile": profile,
+        "path": path_nodes,
+        "edges": path_edges,
+        "avoided_nodes": sorted({str(n) for n in (avoided_nodes or []) if n}),
+        "total_distance_km": round(total_distance, 2),
+        "expected_delay_minutes": round(total_delay, 2),
+        "base_travel_minutes": total_base,
+        "weather_penalty_minutes": total_weather_penalty,
+        "estimated_travel_minutes": eta_minutes,
+        "weather_factor": round(weather_factor, 3),
+        "weather_impact_level": weather_impact_level(weather_factor),
+        "route_weather_factor": round(effective_weather_factor, 3),
+        "route_weather_impact_level": weather_impact_level(effective_weather_factor),
+    }
+
+
+def find_candidate_routes(vertices, edges, source, target, profile, weather_factor, avoid_nodes=None, k=3):
+    blocked_nodes = {str(node) for node in (avoid_nodes or []) if node}
+    blocked_nodes.discard(source)
+    blocked_nodes.discard(target)
+    vertex_ids = {str(v.get("id") or "") for v in vertices if v.get("id")}
+    if source not in vertex_ids or target not in vertex_ids:
+        return []
+    weighted_graph = build_weighted_graph(edges, profile, weather_factor, blocked_nodes=blocked_nodes)
+    if source not in weighted_graph or target not in vertex_ids:
+        return []
+
+    max_candidates = max(1, min(int(k or 3), 6))
+    max_expansions = 30000
+    expansions = 0
+
+    # Heap de busqueda de caminos simples (sin ciclos), ordenado por coste acumulado.
+    heap = [(0.0, [source], [])]
+    candidates = []
+    seen_paths = set()
+
+    while heap and len(candidates) < max_candidates and expansions < max_expansions:
+        cost, path_nodes, path_edges = heapq.heappop(heap)
+        expansions += 1
+        current = path_nodes[-1]
+        if current == target:
+            signature = tuple(path_nodes)
+            if signature in seen_paths:
+                continue
+            seen_paths.add(signature)
+            candidates.append(build_route_payload(profile, path_nodes, path_edges, weather_factor, blocked_nodes, rank=len(candidates) + 1))
+            continue
+
+        for neighbor, edge_cost, edge_data in weighted_graph.get(current, []):
+            if neighbor in path_nodes:
+                continue
+            next_nodes = path_nodes + [neighbor]
+            next_edges = path_edges + [edge_data]
+            heapq.heappush(heap, (cost + float(edge_cost), next_nodes, next_edges))
+
+    return candidates
+
+
+def dijkstra(vertices, edges, source, target, profile, weather_factor, avoid_nodes=None):
+    # Motor de ruta minima: construye camino y metricas agregadas del trayecto.
+    blocked_nodes = {str(node) for node in (avoid_nodes or []) if node}
+    blocked_nodes.discard(source)
+    blocked_nodes.discard(target)
+    graph = build_weighted_graph(edges, profile, weather_factor, blocked_nodes=blocked_nodes)
+
+    dist = {node["id"]: math.inf for node in vertices if node["id"] not in blocked_nodes}
     prev = {}
     prev_edge = {}
 
@@ -459,30 +602,7 @@ def dijkstra(vertices, edges, source, target, profile, weather_factor):
     path_nodes.reverse()
     path_edges.reverse()
 
-    total_distance = sum(e["distance_km"] for e in path_edges)
-    total_delay = sum(e["avg_delay_minutes"] for e in path_edges)
-    total_base = round(sum(float(e.get("base_minutes", 0.0)) for e in path_edges), 2)
-    total_weather_penalty = round(sum(float(e.get("weather_penalty_minutes", 0.0)) for e in path_edges), 2)
-    effective_weather_factor = route_weather_factor(weather_factor, path_edges)
-    if weather_factor > 0:
-        scale = effective_weather_factor / weather_factor
-        total_weather_penalty = round(total_weather_penalty * scale, 2)
-    eta_minutes = round(total_base + total_weather_penalty, 2)
-
-    return {
-        "profile": profile,
-        "path": path_nodes,
-        "edges": path_edges,
-        "total_distance_km": round(total_distance, 2),
-        "expected_delay_minutes": round(total_delay, 2),
-        "base_travel_minutes": total_base,
-        "weather_penalty_minutes": total_weather_penalty,
-        "estimated_travel_minutes": eta_minutes,
-        "weather_factor": round(weather_factor, 3),
-        "weather_impact_level": weather_impact_level(weather_factor),
-        "route_weather_factor": round(effective_weather_factor, 3),
-        "route_weather_impact_level": weather_impact_level(effective_weather_factor),
-    }
+    return build_route_payload(profile, path_nodes, path_edges, weather_factor, blocked_nodes, rank=1)
 
 
 def _edge_key(src: str, dst: str):
@@ -661,6 +781,10 @@ def compute_network_insights(vertices, edges, profile="balanced", min_congestion
             profile_multiplier = 1.08
         elif profile == "resilient":
             profile_multiplier = 0.94
+        elif profile == "eco":
+            profile_multiplier = 0.97
+        elif profile == "low_risk":
+            profile_multiplier = 0.9
         impact_score = total_minutes * congestion_multiplier * live_multiplier * distance_multiplier * profile_multiplier
 
         bottlenecks.append(
@@ -883,13 +1007,19 @@ def build_overview_from_latest_vehicle_state(latest_rows, weather_rows):
             "weather_impact_level": weather_impact_level(weather_factor),
         }
 
-    avg_delay = sum(float(v.get("delay_minutes") or 0.0) for v in latest_rows) / len(latest_rows)
-    avg_speed = sum(float(v.get("speed_kmh") or 0.0) for v in latest_rows) / len(latest_rows)
-    latest_event_time = max((v.get("event_time") for v in latest_rows if v.get("event_time")), default=None)
+    rows_with_event = [v for v in latest_rows if v.get("event_time")]
+    active_rows = [v for v in rows_with_event if str(v.get("vehicle_status") or "").lower() != "maintenance"]
+    metric_rows = active_rows or rows_with_event
+    if not metric_rows:
+        metric_rows = latest_rows
+
+    avg_delay = sum(float(v.get("delay_minutes") or 0.0) for v in metric_rows) / len(metric_rows)
+    avg_speed = sum(float(v.get("speed_kmh") or 0.0) for v in metric_rows) / len(metric_rows)
+    latest_event_time = max((v.get("event_time") for v in rows_with_event if v.get("event_time")), default=None)
 
     return {
-        "vehicles_active": len(latest_rows),
-        "events_loaded": len(latest_rows),
+        "vehicles_active": len(active_rows) if active_rows else len(rows_with_event),
+        "events_loaded": len(rows_with_event),
         "avg_delay_minutes": round(avg_delay, 2),
         "avg_speed_kmh": round(avg_speed, 2),
         "latest_event_time": latest_event_time,
@@ -984,10 +1114,36 @@ def load_vehicle_latest_preferred(events, warehouse_aliases, limit: int = 200):
     # - Fallback nifi/input si Cassandra va atras.
     # - Sincronizacion de fallback hacia Cassandra para converger fuente principal.
     allowed_ids = load_allowed_vehicle_ids()
+    status_map = load_vehicle_status_map()
     cassandra_rows, cassandra_meta = load_vehicle_latest_from_cassandra_with_meta(limit=limit)
     fallback_rows = build_vehicle_latest(events, warehouse_aliases, limit=limit)
     cassandra_rows = filter_rows_by_vehicle_ids(cassandra_rows, allowed_ids)
     fallback_rows = filter_rows_by_vehicle_ids(fallback_rows, allowed_ids)
+    for row in cassandra_rows:
+        row["vehicle_status"] = status_map.get(str(row.get("vehicle_id") or ""), "unknown")
+    for row in fallback_rows:
+        row["vehicle_status"] = status_map.get(str(row.get("vehicle_id") or ""), "unknown")
+
+    # Asegura que los vehiculos en mantenimiento tambien aparezcan en tabla RT
+    # aunque no emitan eventos recientes (estado informativo no operativo).
+    present_ids = {str(r.get("vehicle_id") or "") for r in cassandra_rows + fallback_rows}
+    maintenance_missing = sorted(
+        vid for vid, status in status_map.items() if status == "maintenance" and vid not in present_ids
+    )
+    maintenance_rows = [
+        {
+            "vehicle_id": vid,
+            "warehouse_id": "-",
+            "route_id": "-",
+            "delay_minutes": 0,
+            "speed_kmh": 0.0,
+            "latitude": None,
+            "longitude": None,
+            "event_time": None,
+            "vehicle_status": "maintenance",
+        }
+        for vid in maintenance_missing
+    ]
 
     def _latest_vehicle_dt(items):
         parsed = [parse_iso_utc(i.get("event_time")) for i in items if i.get("event_time")]
@@ -1000,7 +1156,7 @@ def load_vehicle_latest_preferred(events, warehouse_aliases, limit: int = 200):
     if cassandra_rows and not (fallback_latest and cass_latest and fallback_latest > cass_latest + timedelta(seconds=20)):
         for row in cassandra_rows:
             row["warehouse_id"] = normalize_warehouse_id(row.get("warehouse_id"), warehouse_aliases)
-        return cassandra_rows, "cassandra", cassandra_meta
+        return cassandra_rows + maintenance_rows, "cassandra", cassandra_meta
 
     if fallback_rows:
         sync_vehicle_latest_to_cassandra(fallback_rows)
@@ -1008,9 +1164,11 @@ def load_vehicle_latest_preferred(events, warehouse_aliases, limit: int = 200):
         if reloaded_rows:
             for row in reloaded_rows:
                 row["warehouse_id"] = normalize_warehouse_id(row.get("warehouse_id"), warehouse_aliases)
-            return reloaded_rows, "cassandra", reloaded_meta
+            for row in reloaded_rows:
+                row["vehicle_status"] = status_map.get(str(row.get("vehicle_id") or ""), "unknown")
+            return reloaded_rows + maintenance_rows, "cassandra", reloaded_meta
 
-    return fallback_rows, "nifi_files", cassandra_meta
+    return fallback_rows + maintenance_rows, "nifi_files", cassandra_meta
 
 
 def _build_weather_event_id(row, idx):
@@ -1627,16 +1785,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
             source = (query.get("source") or [None])[0]
             target = (query.get("target") or [None])[0]
             profile = (query.get("profile") or ["balanced"])[0]
+            try:
+                alternatives = int((query.get("alternatives") or ["3"])[0] or 3)
+            except ValueError:
+                alternatives = 3
+            avoid_nodes_raw = (query.get("avoid_nodes") or [""])[0]
+            avoid_nodes = [
+                node.strip()
+                for node in str(avoid_nodes_raw).split(",")
+                if node and node.strip() and node.strip() not in {source, target}
+            ]
 
             if not source or not target:
                 self._json({"error": "source y target son obligatorios"}, status=HTTPStatus.BAD_REQUEST)
                 return
             if source == target:
-                self._json({
-                    "route": {
+                trivial_route = {
                         "profile": profile,
+                        "rank": 1,
                         "path": [source],
                         "edges": [],
+                        "avoided_nodes": sorted(avoid_nodes),
                         "total_distance_km": 0.0,
                         "expected_delay_minutes": 0.0,
                         "base_travel_minutes": 0.0,
@@ -1647,15 +1816,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "route_weather_factor": round(weather_factor, 3),
                         "route_weather_impact_level": impact_level,
                     }
-                })
+                self._json({"route": trivial_route, "candidates": [trivial_route], "live_edge_summary": live_edge_summary})
                 return
 
-            route = dijkstra(vertices, edges_with_live, source, target, profile, weather_factor)
-            if route is None:
+            candidates = find_candidate_routes(
+                vertices,
+                edges_with_live,
+                source,
+                target,
+                profile,
+                weather_factor,
+                avoid_nodes=avoid_nodes,
+                k=alternatives,
+            )
+            if not candidates:
                 self._json({"error": "No se pudo calcular ruta para ese origen/destino"}, status=HTTPStatus.NOT_FOUND)
                 return
 
-            self._json({"route": route, "live_edge_summary": live_edge_summary})
+            best_route = candidates[0]
+            for idx, cand in enumerate(candidates, start=1):
+                cand["rank"] = idx
+                cand["delta_vs_best_minutes"] = round(float(cand["estimated_travel_minutes"]) - float(best_route["estimated_travel_minutes"]), 2)
+
+            self._json({"route": best_route, "candidates": candidates, "live_edge_summary": live_edge_summary})
             return
 
         self._json({"error": "endpoint no soportado"}, status=HTTPStatus.NOT_FOUND)

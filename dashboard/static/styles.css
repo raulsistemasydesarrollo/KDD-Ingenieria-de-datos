@@ -105,6 +105,24 @@ p {
   background: rgba(130, 153, 176, 0.12);
 }
 
+body[data-theme="light"] .source-badge.source-cassandra {
+  color: #0a5a3f;
+  border-color: #2f8f63;
+  background: rgba(47, 143, 99, 0.18);
+}
+
+body[data-theme="light"] .source-badge.source-files {
+  color: #12496d;
+  border-color: #2f6fa2;
+  background: rgba(47, 111, 162, 0.17);
+}
+
+body[data-theme="light"] .source-badge.source-unknown {
+  color: #4f6579;
+  border-color: #c8d5e3;
+  background: rgba(200, 213, 227, 0.45);
+}
+
 .fleet-freshness {
   margin-top: 0.35rem;
   font-size: 0.78rem;
@@ -121,6 +139,25 @@ p {
 
 .fleet-freshness.stale {
   color: #ff8ea1;
+}
+
+body[data-theme="light"] .fleet-freshness {
+  color: #3f5568;
+}
+
+body[data-theme="light"] .fleet-freshness.fresh {
+  color: #0d6a4a;
+  font-weight: 600;
+}
+
+body[data-theme="light"] .fleet-freshness.warn {
+  color: #8a5a00;
+  font-weight: 600;
+}
+
+body[data-theme="light"] .fleet-freshness.stale {
+  color: #a61c2c;
+  font-weight: 600;
 }
 
 .cards {
@@ -183,6 +220,30 @@ select {
   color: var(--control-ink);
   padding: 0.45rem 0.7rem;
   font-family: inherit;
+}
+
+.avoid-nodes-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: var(--control-bg);
+  max-width: 760px;
+}
+
+.avoid-node-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-size: 0.84rem;
+  color: var(--control-ink);
+  white-space: nowrap;
+}
+
+.avoid-node-item input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 button {
@@ -454,12 +515,26 @@ body[data-theme="light"] .truck-marker.truck-normal .truck-glyph {
   white-space: nowrap;
 }
 
+#route-candidates-table td,
+#route-candidates-table th {
+  white-space: nowrap;
+}
+
 #all-routes-table .route-hit td {
   background: rgba(255, 209, 102, 0.16);
   font-weight: 700;
 }
 
+#route-candidates-table .route-hit td {
+  background: rgba(255, 209, 102, 0.16);
+  font-weight: 700;
+}
+
 body[data-theme="light"] #all-routes-table .route-hit td {
+  background: rgba(0, 126, 167, 0.14);
+}
+
+body[data-theme="light"] #route-candidates-table .route-hit td {
   background: rgba(0, 126, 167, 0.14);
 }
 
@@ -494,6 +569,21 @@ body[data-theme="light"] #all-routes-table .route-hit td {
   grid-template-columns: 1fr 1fr;
   gap: 0.7rem;
   margin-top: 0.7rem;
+}
+
+.insights-help {
+  margin-top: 0.45rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--summary-bg);
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.35;
+}
+
+.insights-help p {
+  margin: 0.12rem 0;
 }
 
 #bottlenecks-table td,

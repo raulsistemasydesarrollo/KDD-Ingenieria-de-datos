@@ -31,6 +31,7 @@ const state = {
   vehicles: [],
   graph: null,
   route: null,
+  routeCandidates: [],
   selectedVehicle: "",
   theme: "dark",
   weatherFactor: 0,
@@ -65,11 +66,73 @@ const SORTABLE_TABLE_IDS = [
   "vehicle-table",
   "all-routes-table",
   "route-table",
+  "route-candidates-table",
   "weather-table",
   "bottlenecks-table",
   "critical-nodes-table",
   "insights-history-table"
 ];
+
+const TABLE_HEADER_TOOLTIPS = {
+  "vehicle-table": {
+    Vehiculo: "Identificador unico del vehiculo en operacion.",
+    Estado: "Estado operativo del vehiculo (activo o mantenimiento).",
+    Almacen: "Nodo o almacen en el que se reporta su posicion actual.",
+    Ruta: "Corredor reportado del vehiculo (origen -> destino).",
+    "Delay (min)": "Retraso actual estimado del vehiculo en minutos.",
+    Velocidad: "Velocidad instantanea aproximada en km/h.",
+    ETA: "Hora estimada de llegada al siguiente nodo de su ruta.",
+    "Ultimo evento": "Marca temporal del ultimo evento recibido para ese vehiculo."
+  },
+  "all-routes-table": {
+    Ruta: "Tramo considerado en la red logistica.",
+    "Distancia (km)": "Distancia geografica aproximada del tramo en kilometros.",
+    "Delay medio (min)": "Retraso medio del tramo (efectivo si hay telemetria live).",
+    "Tiempo base": "Tiempo sin penalizacion meteo segun el perfil.",
+    "Pen. meteo": "Penalizacion adicional por condiciones meteorologicas.",
+    "Tiempo estimado": "Tiempo total estimado (base + penalizacion).",
+    Perfil: "Perfil de optimizacion usado para estimar coste del tramo."
+  },
+  "route-table": {
+    Campo: "Nombre de la metrica o atributo de la ruta propuesta.",
+    Valor: "Valor calculado para ese campo con filtros actuales."
+  },
+  "route-candidates-table": {
+    "#": "Posicion de la ruta candidata en el ranking (1 = mejor).",
+    "Camino candidato": "Secuencia de nodos de la ruta alternativa propuesta.",
+    "Tiempo estimado": "Duracion total estimada para esa candidata.",
+    "Delta vs mejor": "Diferencia de tiempo frente a la mejor ruta (rank 1).",
+    "Distancia (km)": "Distancia total aproximada de la candidata en kilometros.",
+    "Pen. meteo": "Penalizacion atribuida al clima en esa candidata."
+  },
+  "bottlenecks-table": {
+    Tramo: "Conexion de red evaluada como posible cuello de botella.",
+    "Delay ef. (min)": "Retraso efectivo del tramo considerando datos live.",
+    Congestion: "Nivel de congestion inferido para el tramo.",
+    "Muestras live": "Numero de vehiculos recientes usados para ese tramo.",
+    Impacto: "Score de impacto del tramo en la red (prioridad de atencion)."
+  },
+  "critical-nodes-table": {
+    Nodo: "Nodo logistico evaluado en la red.",
+    Criticidad: "Criticidad estructural declarada para ese nodo.",
+    Grado: "Numero de conexiones directas del nodo en el grafo.",
+    "Delay inc.": "Retraso incidente medio asociado a tramos del nodo.",
+    Score: "Score agregado de criticidad operativa del nodo."
+  },
+  "insights-history-table": {
+    Snapshot: "Instante en el que se guardo el insight historico.",
+    "Top tramo": "Tramo con mayor impacto en ese snapshot.",
+    Impacto: "Valor de impacto del top tramo en ese momento.",
+    "Top nodo": "Nodo con mayor score en ese snapshot.",
+    "Score nodo": "Score del top nodo en ese momento."
+  },
+  "weather-table": {
+    Observacion: "Fecha y hora de observacion meteorologica.",
+    "Temp (C)": "Temperatura del aire en grados Celsius.",
+    "Lluvia (mm)": "Precipitacion acumulada en milimetros.",
+    "Viento (km/h)": "Velocidad del viento en kilometros por hora."
+  }
+};
 
 const tableSortState = new Map();
 
@@ -183,6 +246,21 @@ function bindSortableTables() {
       });
     });
     updateSortableHeaderState(tableId);
+  });
+}
+
+function applyTableHeaderTooltips() {
+  Object.entries(TABLE_HEADER_TOOLTIPS).forEach(([tableId, tooltipMap]) => {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const headers = Array.from(table.querySelectorAll("thead th"));
+    headers.forEach((th) => {
+      const key = (th.textContent || "").trim();
+      const tip = tooltipMap[key];
+      if (!tip) return;
+      th.title = tip;
+      th.setAttribute("aria-label", tip);
+    });
   });
 }
 
@@ -340,14 +418,16 @@ function renderVehicleTable(items) {
     .map(
       (v) => {
         const eta = computeVehicleEta(v);
+        const hasLiveEvent = !!v.event_time;
         return `
       <tr>
         <td>${v.vehicle_id}</td>
+        <td>${String(v.vehicle_status || "active").toUpperCase()}</td>
         <td>${v.warehouse_id || "-"}</td>
         <td>${displayRouteForVehicle(v)}</td>
-        <td class=\"${severityClass(v.delay_minutes)}\">${v.delay_minutes}</td>
-        <td>${fmt.n(v.speed_kmh, 1)}</td>
-        <td>${eta.etaLabel}</td>
+        <td class=\"${hasLiveEvent ? severityClass(v.delay_minutes) : ""}\">${hasLiveEvent ? v.delay_minutes : "-"}</td>
+        <td>${hasLiveEvent ? fmt.n(v.speed_kmh, 1) : "-"}</td>
+        <td>${hasLiveEvent ? eta.etaLabel : "-"}</td>
         <td>${fmt.dt(v.event_time)}</td>
       </tr>
     `;
@@ -830,8 +910,11 @@ function updateMarkers(items) {
   }
 
   items.forEach((v) => {
+    const lat = Number(v.latitude);
+    const lng = Number(v.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const key = v.vehicle_id;
-    const latlng = [v.latitude, v.longitude];
+    const latlng = [lat, lng];
     const selected = !state.selectedVehicle || state.selectedVehicle === key;
 
     if (!state.markers.has(key)) {
@@ -946,6 +1029,19 @@ function hydrateVehicleSelect(items) {
 }
 
 function hydrateGraphControls(vertices) {
+  const sourceSelect = document.getElementById("source-select");
+  const targetSelect = document.getElementById("target-select");
+  const rtSourceSelect = document.getElementById("rt-source-select");
+  const rtTargetSelect = document.getElementById("rt-target-select");
+  const avoidGrid = document.getElementById("avoid-nodes-grid");
+  const prevSource = sourceSelect?.value || "";
+  const prevTarget = targetSelect?.value || "";
+  const prevRtSource = rtSourceSelect?.value || "";
+  const prevRtTarget = rtTargetSelect?.value || "";
+  const prevAvoid = new Set(
+    Array.from(avoidGrid?.querySelectorAll("input[type='checkbox']:checked") || []).map((n) => n.value)
+  );
+
   const sortedVertices = [...(vertices || [])].sort((a, b) => {
     const left = `${a?.id || ""} - ${a?.name || ""}`.toUpperCase();
     const right = `${b?.id || ""} - ${b?.name || ""}`.toUpperCase();
@@ -953,14 +1049,55 @@ function hydrateGraphControls(vertices) {
   });
   const nodeOptions = sortedVertices.map((v) => `<option value=\"${v.id}\">${v.id} - ${v.name}</option>`).join("");
   const options = `<option value=\"\">TODOS</option>${nodeOptions}`;
-  document.getElementById("source-select").innerHTML = options;
-  document.getElementById("target-select").innerHTML = options;
-  document.getElementById("rt-source-select").innerHTML = options;
-  document.getElementById("rt-target-select").innerHTML = options;
-  document.getElementById("source-select").value = "";
-  document.getElementById("target-select").value = "";
-  document.getElementById("rt-source-select").value = "";
-  document.getElementById("rt-target-select").value = "";
+  sourceSelect.innerHTML = options;
+  targetSelect.innerHTML = options;
+  rtSourceSelect.innerHTML = options;
+  rtTargetSelect.innerHTML = options;
+  sourceSelect.value = prevSource || "";
+  targetSelect.value = prevTarget || "";
+  rtSourceSelect.value = prevRtSource || "";
+  rtTargetSelect.value = prevRtTarget || "";
+
+  renderAvoidNodesControl(sortedVertices, prevAvoid);
+}
+
+function renderAvoidNodesControl(sortedVertices, prevAvoid = null) {
+  const avoidGrid = document.getElementById("avoid-nodes-grid");
+  if (!avoidGrid) return;
+  const source = document.getElementById("source-select")?.value || "";
+  const target = document.getElementById("target-select")?.value || "";
+  const selected = prevAvoid || new Set(getAvoidNodesSelection());
+  const options = (sortedVertices || [])
+    .filter((v) => v.id && v.id !== source && v.id !== target)
+    .sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), "es"));
+
+  if (!options.length) {
+    avoidGrid.innerHTML = `<span class="muted">Sin nodos alternativos para evitar.</span>`;
+    return;
+  }
+
+  avoidGrid.innerHTML = options
+    .map(
+      (v) => `
+      <label class="avoid-node-item">
+        <input type="checkbox" value="${v.id}" ${selected.has(v.id) ? "checked" : ""}/>
+        <span>${v.id}</span>
+      </label>
+    `
+    )
+    .join("");
+
+  avoidGrid.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.addEventListener("change", () => calculateRoute());
+  });
+}
+
+function getAvoidNodesSelection() {
+  const avoidGrid = document.getElementById("avoid-nodes-grid");
+  if (!avoidGrid) return [];
+  return Array.from(avoidGrid.querySelectorAll("input[type='checkbox']:checked"))
+    .map((opt) => opt.value || "")
+    .filter((v) => !!v);
 }
 
 function enforceDistinctRouteEndpoints() {
@@ -1112,18 +1249,51 @@ function renderInsightsHistory(history) {
 function profileBaseMinutes(profile, edge) {
   const distance = Number(edge.distance_km || 0);
   const delay = edgeDelayMinutes(edge);
-  if (profile === "fastest") return (distance / 88.0) * 60.0 + delay * 0.9;
-  if (profile === "resilient") return (distance / 70.0) * 60.0 + delay * 1.15;
-  return (distance / 75.0) * 60.0 + delay;
+  if (profile === "fastest") return (distance / 100.0) * 60.0 + delay * 0.55;
+  if (profile === "resilient") return (distance / 62.0) * 60.0 + delay * 1.65;
+  if (profile === "eco") return (distance / 74.0) * 60.0 + delay * 1.2 + distance * 0.018;
+  if (profile === "low_risk") return (distance / 69.0) * 60.0 + delay * 1.45;
+  return (distance / 76.0) * 60.0 + delay;
+}
+
+function edgeCongestionWeight(edge) {
+  const level = edgeCongestionLevel(edge);
+  if (level === "high") return 1.6;
+  if (level === "medium") return 1.25;
+  if (level === "low") return 1.0;
+  return 1.1;
 }
 
 function computeEdgeEstimate(edge, profile) {
   const delay = edgeDelayMinutes(edge);
+  const liveSamples = Number(edge.live_sample_count || 0);
   const weatherFactor = Number(state.weatherFactor || 0);
+  const congestionWeight = edgeCongestionWeight(edge);
   const base = profileBaseMinutes(profile, edge);
-  let penalty = delay * weatherFactor * 1.9;
-  if (profile === "fastest") penalty = delay * weatherFactor * 1.4;
-  if (profile === "resilient") penalty = delay * weatherFactor * 0.7;
+  let penalty = delay * weatherFactor * 1.6 + (congestionWeight - 1.0) * 7.0;
+  if (profile === "fastest") {
+    penalty = delay * weatherFactor * 0.8 + (congestionWeight - 1.0) * 4.0;
+  }
+  if (profile === "resilient") {
+    penalty =
+      delay * weatherFactor * 2.6 +
+      (congestionWeight - 1.0) * 14.0 +
+      Math.pow(Math.max(0, delay - 8.0), 1.2) * 0.9;
+  }
+  if (profile === "eco") {
+    penalty =
+      delay * weatherFactor * 1.2 +
+      (congestionWeight - 1.0) * 10.0 +
+      Math.pow(Math.max(0, delay - 6.0), 1.12) * 0.55;
+  }
+  if (profile === "low_risk") {
+    const telemetryRisk = liveSamples <= 0 ? 1.9 : 1.0 / (1.0 + Math.min(6.0, liveSamples) * 0.65);
+    penalty =
+      delay * weatherFactor * 3.05 +
+      (congestionWeight - 1.0) * 17.0 +
+      Math.pow(Math.max(0, delay - 7.0), 1.18) * 1.05 +
+      telemetryRisk * 3.0;
+  }
   return {
     base,
     penalty,
@@ -1221,10 +1391,12 @@ function renderRouteSummary(route) {
   const climateImpactPct = base > 0 ? (penalty / base) * 100 : 0;
   const effectiveWeatherFactor = Number(route.route_weather_factor ?? route.weather_factor ?? 0);
   const effectiveImpactLevel = route.route_weather_impact_level || route.weather_impact_level || "low";
+  const avoidedNodes = (route.avoided_nodes || []).filter((v) => !!v);
   tbody.innerHTML = `
     <tr><td>Perfil</td><td>${route.profile}</td></tr>
     <tr><td>Ultimo recalculo</td><td>${state.lastRouteCalcAt ? fmt.dt(state.lastRouteCalcAt) : "-"}</td></tr>
     <tr><td>Camino</td><td>${route.path.join(" -> ")}</td></tr>
+    <tr><td>Nodos evitados</td><td>${avoidedNodes.length ? avoidedNodes.join(", ") : "-"}</td></tr>
     <tr><td>Distancia total</td><td>${fmt.n(route.total_distance_km, 1)} km</td></tr>
     <tr><td>Tiempo base</td><td>${fmt.hm(route.base_travel_minutes)}</td></tr>
     <tr><td>Penalizacion meteo</td><td>+${fmt.hm(route.weather_penalty_minutes)} (${effectiveImpactLevel.toUpperCase()})</td></tr>
@@ -1236,6 +1408,36 @@ function renderRouteSummary(route) {
     <tr><td>Factor meteo aplicado</td><td>${fmt.n(effectiveWeatherFactor, 2)} (${effectiveImpactLevel.toUpperCase()})</td></tr>
   `;
   applyTableSortState("route-table");
+}
+
+function renderRouteCandidates(candidates, selectedRoute = null) {
+  const tbody = document.querySelector("#route-candidates-table tbody");
+  if (!tbody) return;
+  const rows = Array.isArray(candidates) ? candidates : [];
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6">Sin candidatas calculadas</td></tr>`;
+    applyTableSortState("route-candidates-table");
+    return;
+  }
+  const selectedPath = (selectedRoute?.path || []).join("|");
+  tbody.innerHTML = rows
+    .map((cand) => {
+      const isSelected = (cand?.path || []).join("|") === selectedPath;
+      const delta = Number(cand?.delta_vs_best_minutes || 0);
+      const deltaLabel = delta > 0 ? `+${fmt.hm(delta)}` : delta < 0 ? `-${fmt.hm(Math.abs(delta))}` : "0 min";
+      return `
+      <tr class="${isSelected ? "route-hit" : ""}">
+        <td>${cand.rank || "-"}</td>
+        <td>${(cand.path || []).join(" -> ")}</td>
+        <td>${fmt.hm(cand.estimated_travel_minutes)}</td>
+        <td>${deltaLabel}</td>
+        <td>${fmt.n(cand.total_distance_km, 1)}</td>
+        <td>+${fmt.hm(cand.weather_penalty_minutes)}</td>
+      </tr>
+    `;
+    })
+    .join("");
+  applyTableSortState("route-candidates-table");
 }
 
 function setRouteStatus(text, level = "") {
@@ -1493,6 +1695,8 @@ async function refreshVehicleHistory() {
 async function loadGraph() {
   const [graph, history] = await Promise.all([fetchJson(buildGraphApiUrl()), fetchJson(buildInsightsHistoryApiUrl())]);
   state.graph = graph;
+  state.route = null;
+  state.routeCandidates = [];
   state.liveEdgeSummary = graph.live_edge_summary || state.liveEdgeSummary;
   state.networkInsights = graph.network_insights || null;
   state.insightsHistory = history || null;
@@ -1503,6 +1707,7 @@ async function loadGraph() {
   renderAllRoutesTable(graph, null);
   renderNetworkMap(graph, null);
   renderRouteSummary(null);
+  renderRouteCandidates([], null);
   renderNetworkInsights(state.networkInsights);
   renderInsightsHistory(state.insightsHistory);
 }
@@ -1536,9 +1741,11 @@ async function calculateRoute() {
   const source = document.getElementById("source-select").value;
   const target = document.getElementById("target-select").value;
   const profile = document.getElementById("profile-select").value;
+  const avoidedNodes = getAvoidNodesSelection().filter((id) => id !== source && id !== target);
 
   if (!source || !target) {
     state.route = null;
+    state.routeCandidates = [];
     const visibleItems = resolveVisibleVehicles(state.allVehicles?.length ? state.allVehicles : state.vehicles);
     state.vehicles = visibleItems;
     renderVehicleTable(visibleItems);
@@ -1548,6 +1755,7 @@ async function calculateRoute() {
     renderAllRoutesTable(state.graph, null);
     renderNetworkMap(state.graph, null);
     renderRouteSummary(null);
+    renderRouteCandidates([], null);
     setRouteStatus("Vista global (TODOS): sin ruta concreta seleccionada", "ok");
     state.routeRequestInFlight = false;
     if (routeBtn) {
@@ -1559,9 +1767,16 @@ async function calculateRoute() {
 
   try {
     const [result, weatherRes, overviewRes, graphRes, historyRes] = await Promise.all([
-      fetchJson(
-        `/api/network/best-route?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}&profile=${encodeURIComponent(profile)}`
-      ),
+      fetchJson((() => {
+        const params = new URLSearchParams({
+          source,
+          target,
+          profile,
+          alternatives: "4"
+        });
+        if (avoidedNodes.length) params.set("avoid_nodes", avoidedNodes.join(","));
+        return `/api/network/best-route?${params.toString()}`;
+      })()),
       fetchJson("/api/weather/latest?limit=12"),
       fetchJson("/api/overview"),
       fetchJson(buildGraphApiUrl()),
@@ -1569,6 +1784,7 @@ async function calculateRoute() {
     ]);
     state.graph = graphRes;
     state.route = result.route;
+    state.routeCandidates = result.candidates || [];
     state.lastRouteCalcAt = new Date().toISOString();
     state.weatherFactor = Number(result.route.route_weather_factor || result.route.weather_factor || overviewRes.overview.weather_factor || 0);
     state.weatherImpactLevel =
@@ -1589,14 +1805,16 @@ async function calculateRoute() {
     renderAllRoutesTable(state.graph, state.route);
     renderNetworkMap(state.graph, state.route);
     renderRouteSummary(state.route);
+    renderRouteCandidates(state.routeCandidates, state.route);
     renderNetworkInsights(state.networkInsights);
     renderInsightsHistory(state.insightsHistory);
     setRouteStatus(
-      `Ruta actualizada (${profile}) ${new Date().toLocaleTimeString("es-ES", { hour12: false })}`,
+      `Ruta actualizada (${profile})${avoidedNodes.length ? ` evitando: ${avoidedNodes.join(", ")}` : ""} ${new Date().toLocaleTimeString("es-ES", { hour12: false })}`,
       "ok"
     );
   } catch (err) {
     state.route = null;
+    state.routeCandidates = [];
     const visibleItems = resolveVisibleVehicles(state.allVehicles?.length ? state.allVehicles : state.vehicles);
     state.vehicles = visibleItems;
     renderVehicleTable(visibleItems);
@@ -1605,6 +1823,7 @@ async function calculateRoute() {
     applyVehicleFocus();
     renderAllRoutesTable(state.graph, null);
     renderNetworkMap(state.graph, null);
+    renderRouteCandidates([], null);
     const tbody = document.querySelector("#route-table tbody");
     if (tbody) tbody.innerHTML = `<tr><td>Error</td><td>No se pudo calcular la ruta: ${err.message}</td></tr>`;
     setRouteStatus(`Error calculando ruta: ${err.message}`, "error");
@@ -1631,8 +1850,14 @@ function bindEvents() {
     await refreshVehicleHistory();
   });
   document.getElementById("route-btn").addEventListener("click", calculateRoute);
-  document.getElementById("source-select").addEventListener("change", calculateRoute);
-  document.getElementById("target-select").addEventListener("change", calculateRoute);
+  document.getElementById("source-select").addEventListener("change", () => {
+    renderAvoidNodesControl(state.graph?.vertices || []);
+    calculateRoute();
+  });
+  document.getElementById("target-select").addEventListener("change", () => {
+    renderAvoidNodesControl(state.graph?.vertices || []);
+    calculateRoute();
+  });
   document.getElementById("profile-select").addEventListener("change", () => {
     const profile = document.getElementById("profile-select").value || "balanced";
     state.insightsProfile = profile;
@@ -1670,6 +1895,7 @@ async function bootstrap() {
   const routeProfile = document.getElementById("profile-select");
   if (routeProfile) routeProfile.value = state.insightsProfile;
   bindSortableTables();
+  applyTableHeaderTooltips();
   bindEvents();
   await Promise.all([refreshFleet(), loadGraph()]);
   await calculateRoute();

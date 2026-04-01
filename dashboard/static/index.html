@@ -59,6 +59,7 @@
             <thead>
               <tr>
                 <th>Vehiculo</th>
+                <th>Estado</th>
                 <th>Almacen</th>
                 <th>Ruta</th>
                 <th>Delay (min)</th>
@@ -81,11 +82,17 @@
           <select id="target-select"></select>
         </div>
         <div class="row">
+          <label>Evitar nodos</label>
+          <div id="avoid-nodes-grid" class="avoid-nodes-grid" aria-label="Nodos a evitar"></div>
+        </div>
+        <div class="row">
           <label for="profile-select">Perfil</label>
           <select id="profile-select">
             <option value="balanced">Balanceado</option>
             <option value="fastest">Mas rapido</option>
             <option value="resilient">Resiliente al clima</option>
+            <option value="eco">Eco (consumo/emisiones)</option>
+            <option value="low_risk">ETA estable (bajo riesgo)</option>
           </select>
           <button id="route-btn">Calcular mejor ruta</button>
           <span id="route-status" class="route-status">Pendiente de calculo</span>
@@ -130,13 +137,37 @@
             </tbody>
           </table>
         </div>
+        <div class="table-wrap small">
+          <table id="route-candidates-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Camino candidato</th>
+                <th>Tiempo estimado</th>
+                <th>Delta vs mejor</th>
+                <th>Distancia (km)</th>
+                <th>Pen. meteo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6">Sin candidatas calculadas</td></tr>
+            </tbody>
+          </table>
+        </div>
         <h3>Insights de red (live)</h3>
+        <div class="insights-help" role="note" aria-label="Ayuda de insights de red">
+          <p><strong>Que ves aqui:</strong> la tabla de la izquierda marca los tramos que mas retraso causan y la de la derecha los nodos mas sensibles de la red.</p>
+          <p><strong>Como leerlo rapido:</strong> mayor <em>Impacto/Score</em> = mayor prioridad de actuacion. <em>Muestras live</em> indica cuanta evidencia real reciente hay.</p>
+          <p><strong>Tabla inferior:</strong> muestra la evolucion historica para comprobar si la red mejora o empeora.</p>
+        </div>
         <div class="row">
           <label for="insights-profile-select">Perfil insights</label>
           <select id="insights-profile-select">
             <option value="balanced">Balanceado</option>
             <option value="fastest">Mas rapido</option>
             <option value="resilient">Resiliente</option>
+            <option value="eco">Eco</option>
+            <option value="low_risk">Bajo riesgo</option>
           </select>
           <label for="insights-congestion-select">Congestion minima</label>
           <select id="insights-congestion-select">
