@@ -225,6 +225,7 @@ services:
       - "8501:8501"
     volumes:
       - ./:/opt/project:ro
+      - /var/run/docker.sock:/var/run/docker.sock
 
   airflow-postgres:
     image: postgres:16

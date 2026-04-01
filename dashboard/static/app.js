@@ -46,7 +46,14 @@ const state = {
   networkInsights: null,
   insightsProfile: "balanced",
   insightsMinCongestion: "all",
-  insightsHistory: null
+  insightsHistory: null,
+  objectiveWeights: { time: 55, risk: 30, eco: 15 },
+  temporalMode: "auto",
+  retrainState: null,
+  retrainAdvice: null,
+  routeCalcDebounceTimer: null,
+  lastOverview: null,
+  lastOverviewLiveEdgeSummary: null
 };
 
 // Formateadores de UI centralizados para evitar inconsistencias visuales.
@@ -102,6 +109,7 @@ const TABLE_HEADER_TOOLTIPS = {
     "Camino candidato": "Secuencia de nodos de la ruta alternativa propuesta.",
     "Tiempo estimado": "Duracion total estimada para esa candidata.",
     "Delta vs mejor": "Diferencia de tiempo frente a la mejor ruta (rank 1).",
+    "Delta optimizacion": "Diferencia de score multiobjetivo frente a la mejor candidata.",
     "Distancia (km)": "Distancia total aproximada de la candidata en kilometros.",
     "Pen. meteo": "Penalizacion atribuida al clima en esa candidata."
   },
@@ -264,9 +272,9 @@ function applyTableHeaderTooltips() {
   });
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, options = {}) {
   // Wrapper fetch con mensaje de error enriquecido para diagnostico en UI.
-  const res = await fetch(url);
+  const res = await fetch(url, options);
   if (!res.ok) {
     let details = "";
     try {
@@ -353,6 +361,8 @@ function buildTruckIcon(vehicle, selected, angle = 0) {
 }
 
 function renderOverview(overview, liveEdgeSummary = null) {
+  state.lastOverview = overview || null;
+  state.lastOverviewLiveEdgeSummary = liveEdgeSummary || null;
   const cards = [
     ["Vehiculos activos", overview.vehicles_active],
     ["Eventos cargados", overview.events_loaded],
@@ -364,6 +374,11 @@ function renderOverview(overview, liveEdgeSummary = null) {
   ];
   if (liveEdgeSummary) {
     cards.push(["Aristas live", `${liveEdgeSummary.edges_with_live_samples || 0}`]);
+  }
+  const retrainScore = Number(state.retrainAdvice?.score);
+  if (Number.isFinite(retrainScore)) {
+    cards.push(["Riesgo de deriva IA", `${Math.round(retrainScore)}/100`]);
+    cards.push(["Reentreno", state.retrainAdvice?.recommended ? "RECOMENDADO" : "NO necesario"]);
   }
   document.getElementById("overview-cards").innerHTML = cards
     .map(([title, value]) => `<article class=\"card\"><h4>${title}</h4><div class=\"big\">${value}</div></article>`)
@@ -1100,6 +1115,124 @@ function getAvoidNodesSelection() {
     .filter((v) => !!v);
 }
 
+function normalizedObjectiveWeights() {
+  const time = Math.max(0, Number(state.objectiveWeights?.time || 0));
+  const risk = Math.max(0, Number(state.objectiveWeights?.risk || 0));
+  const eco = Math.max(0, Number(state.objectiveWeights?.eco || 0));
+  const total = time + risk + eco;
+  if (total <= 0) return { time: 1 / 3, risk: 1 / 3, eco: 1 / 3 };
+  return { time: time / total, risk: risk / total, eco: eco / total };
+}
+
+function updateObjectiveWeightLabels() {
+  const timeRaw = Number(document.getElementById("objective-time")?.value || state.objectiveWeights.time || 0);
+  const riskRaw = Number(document.getElementById("objective-risk")?.value || state.objectiveWeights.risk || 0);
+  const ecoRaw = Number(document.getElementById("objective-eco")?.value || state.objectiveWeights.eco || 0);
+  state.objectiveWeights = { time: timeRaw, risk: riskRaw, eco: ecoRaw };
+  const normalized = normalizedObjectiveWeights();
+  const timePct = `${Math.round(normalized.time * 100)}%`;
+  const riskPct = `${Math.round(normalized.risk * 100)}%`;
+  const ecoPct = `${Math.round(normalized.eco * 100)}%`;
+  const tv = document.getElementById("objective-time-value");
+  const rv = document.getElementById("objective-risk-value");
+  const ev = document.getElementById("objective-eco-value");
+  if (tv) tv.textContent = timePct;
+  if (rv) rv.textContent = riskPct;
+  if (ev) ev.textContent = ecoPct;
+}
+
+function scheduleRouteRecalc(delayMs = 220) {
+  if (state.routeCalcDebounceTimer) {
+    clearTimeout(state.routeCalcDebounceTimer);
+  }
+  state.routeCalcDebounceTimer = setTimeout(() => {
+    state.routeCalcDebounceTimer = null;
+    calculateRoute();
+  }, delayMs);
+}
+
+function renderRetrainStatePanel() {
+  const statusEl = document.getElementById("retrain-status");
+  const adviceEl = document.getElementById("retrain-advice");
+  const btn = document.getElementById("retrain-btn");
+  const retrainState = state.retrainState || {};
+  const advice = state.retrainAdvice || {};
+  const status = String(retrainState.status || "idle").toLowerCase();
+  const statusLabelMap = {
+    idle: "en espera",
+    running: "reentrenando",
+    done: "completado",
+    error: "fallo"
+  };
+  const statusLabel = statusLabelMap[status] || status;
+  const duration = retrainState.duration_seconds ? ` (${fmt.n(retrainState.duration_seconds, 1)} s)` : "";
+  if (statusEl) {
+    let suffix = "";
+    if (status === "done") suffix = retrainState.finished_at ? ` | fin ${fmt.dt(retrainState.finished_at)}` : "";
+    if (status === "error") suffix = retrainState.message ? ` | ${retrainState.message}` : "";
+    statusEl.textContent = `Modelo: ${statusLabel}${duration}${suffix}`;
+    statusEl.classList.remove("loading", "ok", "error");
+    if (status === "running") statusEl.classList.add("loading");
+    if (status === "done") statusEl.classList.add("ok");
+    if (status === "error") statusEl.classList.add("error");
+  }
+  if (btn) {
+    btn.disabled = status === "running";
+    btn.textContent = status === "running" ? "Reentrenando..." : "Reentrenar IA";
+  }
+  if (adviceEl) {
+    const recommended = !!advice.recommended;
+    const score = Number(advice.score || 0);
+    const threshold = Number(advice.threshold || 55);
+    const reasonsList = Array.isArray(advice.reasons) ? advice.reasons.slice(0, 3) : [];
+    const reasonsText = reasonsList.length
+      ? reasonsList.map((r, idx) => `${idx + 1}) ${r}`).join(" ")
+      : "Sin razones disponibles.";
+    if (recommended) {
+      adviceEl.textContent = `Reentreno recomendado AHORA: score ${score}/100 (umbral ${threshold}). Este score mide riesgo de deriva del modelo (0-100): mas alto = mas probable que convenga reentrenar. Motivos: ${reasonsText}`;
+    } else {
+      adviceEl.textContent = `Reentreno NO recomendado ahora: score ${score}/100 (umbral ${threshold}). Este score mide riesgo de deriva del modelo (0-100): mas alto = mas probable que convenga reentrenar. El modelo se considera estable. ${reasonsText}`;
+    }
+    adviceEl.classList.remove("bad", "recommended", "stable");
+    adviceEl.classList.add(recommended ? "recommended" : "stable");
+  }
+}
+
+async function refreshRetrainStatus() {
+  try {
+    const payload = await fetchJson("/api/ml/retrain/status");
+    state.retrainState = payload.state || null;
+    state.retrainAdvice = payload.advice || null;
+    if (state.lastOverview) {
+      renderOverview(state.lastOverview, state.lastOverviewLiveEdgeSummary);
+    }
+    renderRetrainStatePanel();
+  } catch (_err) {
+    // Silencioso para no interrumpir flujo principal del dashboard.
+  }
+}
+
+async function triggerRetrain() {
+  try {
+    const res = await fetch("/api/ml/retrain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trigger: "manual_dashboard" })
+    });
+    const payload = await res.json();
+    state.retrainState = payload.state || state.retrainState;
+    state.retrainAdvice = payload.advice || state.retrainAdvice;
+    renderRetrainStatePanel();
+  } catch (err) {
+    const statusEl = document.getElementById("retrain-status");
+    if (statusEl) {
+      statusEl.textContent = `Modelo: error (${err.message})`;
+      statusEl.classList.remove("loading", "ok");
+      statusEl.classList.add("error");
+    }
+  }
+}
+
 function enforceDistinctRouteEndpoints() {
   const sourceEl = document.getElementById("source-select");
   const targetEl = document.getElementById("target-select");
@@ -1253,6 +1386,7 @@ function profileBaseMinutes(profile, edge) {
   if (profile === "resilient") return (distance / 62.0) * 60.0 + delay * 1.65;
   if (profile === "eco") return (distance / 74.0) * 60.0 + delay * 1.2 + distance * 0.018;
   if (profile === "low_risk") return (distance / 69.0) * 60.0 + delay * 1.45;
+  if (profile === "reliable") return (distance / 71.0) * 60.0 + delay * 1.35;
   return (distance / 76.0) * 60.0 + delay;
 }
 
@@ -1264,40 +1398,90 @@ function edgeCongestionWeight(edge) {
   return 1.1;
 }
 
+function edgeUncertaintyIndex(delay, congestionWeight, liveSamples) {
+  const telemetry = 1.0 / (1.0 + Math.min(8, Math.max(0, Number(liveSamples || 0))) * 0.7);
+  const delayComp = Math.min(1.3, Math.max(0, Number(delay || 0) - 4.0) / 14.0);
+  const congestionComp = (congestionWeight - 1.0) * 0.95;
+  return telemetry + delayComp + congestionComp;
+}
+
+function temporalFactorForEdge(edge) {
+  const mode = String(state.temporalMode || "auto").toLowerCase();
+  const now = new Date();
+  let hour = now.getHours();
+  if (mode === "peak") hour = 8;
+  if (mode === "night") hour = 1;
+  if (mode === "offpeak") hour = 11;
+  const weekday = now.getDay() >= 1 && now.getDay() <= 5;
+  const congestion = edgeCongestionLevel(edge);
+  const distance = Number(edge.distance_km || 0);
+  if (weekday && ((hour >= 7 && hour <= 10) || (hour >= 17 && hour <= 20))) {
+    let base = 1.13;
+    if (congestion === "high") base += 0.08;
+    if (congestion === "medium") base += 0.05;
+    return Math.min(1.32, base + Math.min(0.06, distance / 5000.0));
+  }
+  if (hour >= 22 || hour <= 5) {
+    let base = 0.94;
+    if (congestion === "high") base = 1.0;
+    return Math.max(0.88, base - Math.min(0.03, distance / 9000.0));
+  }
+  return 1.0;
+}
+
 function computeEdgeEstimate(edge, profile) {
   const delay = edgeDelayMinutes(edge);
   const liveSamples = Number(edge.live_sample_count || 0);
   const weatherFactor = Number(state.weatherFactor || 0);
   const congestionWeight = edgeCongestionWeight(edge);
+  const uncertainty = edgeUncertaintyIndex(delay, congestionWeight, liveSamples);
+  const objective = normalizedObjectiveWeights();
+  const temporalFactor = temporalFactorForEdge(edge);
   const base = profileBaseMinutes(profile, edge);
-  let penalty = delay * weatherFactor * 1.6 + (congestionWeight - 1.0) * 7.0;
+  let penalty = delay * weatherFactor * 1.6 * Math.max(0.5, temporalFactor) + (congestionWeight - 1.0) * 7.0;
   if (profile === "fastest") {
-    penalty = delay * weatherFactor * 0.8 + (congestionWeight - 1.0) * 4.0;
+    penalty = delay * weatherFactor * 0.8 * Math.max(0.5, temporalFactor) + (congestionWeight - 1.0) * 4.0;
   }
   if (profile === "resilient") {
     penalty =
-      delay * weatherFactor * 2.6 +
+      delay * weatherFactor * 2.6 * Math.max(0.5, temporalFactor) +
       (congestionWeight - 1.0) * 14.0 +
       Math.pow(Math.max(0, delay - 8.0), 1.2) * 0.9;
   }
   if (profile === "eco") {
     penalty =
-      delay * weatherFactor * 1.2 +
+      delay * weatherFactor * 1.2 * Math.max(0.5, temporalFactor) +
       (congestionWeight - 1.0) * 10.0 +
       Math.pow(Math.max(0, delay - 6.0), 1.12) * 0.55;
   }
   if (profile === "low_risk") {
     const telemetryRisk = liveSamples <= 0 ? 1.9 : 1.0 / (1.0 + Math.min(6.0, liveSamples) * 0.65);
     penalty =
-      delay * weatherFactor * 3.05 +
+      delay * weatherFactor * 3.05 * Math.max(0.5, temporalFactor) +
       (congestionWeight - 1.0) * 17.0 +
       Math.pow(Math.max(0, delay - 7.0), 1.18) * 1.05 +
       telemetryRisk * 3.0;
   }
+  if (profile === "reliable") {
+    penalty =
+      delay * weatherFactor * 2.8 * Math.max(0.5, temporalFactor) +
+      (congestionWeight - 1.0) * 16.0 +
+      Math.pow(Math.max(0, delay - 6.0), 1.15) * 1.2;
+  }
+  const riskComponent =
+    uncertainty * (profile === "reliable" ? 14.0 : 11.5) +
+    Math.pow(Math.max(0, delay - 7.0), 1.08) +
+    (congestionWeight - 1.0) * 6.0;
+  const ecoComponent = Number(edge.distance_km || 0) * 0.075 + delay * 0.42 + (congestionWeight - 1.0) * 5.2;
+  const operationalTotal = base + penalty + uncertainty * (profile === "reliable" ? 2.4 : 1.8);
+  const weighted =
+    operationalTotal * objective.time + riskComponent * objective.risk + ecoComponent * objective.eco;
   return {
     base,
     penalty,
-    total: base + penalty
+    total: operationalTotal,
+    weighted,
+    uncertainty
   };
 }
 
@@ -1392,20 +1576,30 @@ function renderRouteSummary(route) {
   const effectiveWeatherFactor = Number(route.route_weather_factor ?? route.weather_factor ?? 0);
   const effectiveImpactLevel = route.route_weather_impact_level || route.weather_impact_level || "low";
   const avoidedNodes = (route.avoided_nodes || []).filter((v) => !!v);
+  const explain = Array.isArray(route.explain) ? route.explain : [];
+  const objective = route.objective_weights || normalizedObjectiveWeights();
+  const reliabilityPct = Math.round(Number(route.on_time_probability || 0) * 100);
   tbody.innerHTML = `
     <tr><td>Perfil</td><td>${route.profile}</td></tr>
     <tr><td>Ultimo recalculo</td><td>${state.lastRouteCalcAt ? fmt.dt(state.lastRouteCalcAt) : "-"}</td></tr>
     <tr><td>Camino</td><td>${route.path.join(" -> ")}</td></tr>
     <tr><td>Nodos evitados</td><td>${avoidedNodes.length ? avoidedNodes.join(", ") : "-"}</td></tr>
+    <tr><td>Objetivo (tiempo/riesgo/eco)</td><td>${Math.round(Number(objective.time || 0) * 100)}% / ${Math.round(Number(objective.risk || 0) * 100)}% / ${Math.round(Number(objective.eco || 0) * 100)}%</td></tr>
+    <tr><td>Patron horario aplicado</td><td>${String(route.temporal_mode || state.temporalMode || "auto").toUpperCase()}</td></tr>
     <tr><td>Distancia total</td><td>${fmt.n(route.total_distance_km, 1)} km</td></tr>
     <tr><td>Tiempo base</td><td>${fmt.hm(route.base_travel_minutes)}</td></tr>
     <tr><td>Penalizacion meteo</td><td>+${fmt.hm(route.weather_penalty_minutes)} (${effectiveImpactLevel.toUpperCase()})</td></tr>
     <tr><td>Impacto meteo en ruta</td><td>${fmt.n(climateImpactPct, 1)}%</td></tr>
     <tr><td>Delay esperado</td><td>${fmt.hm(route.expected_delay_minutes)}</td></tr>
     <tr><td>Tiempo estimado</td><td>${fmt.hm(route.estimated_travel_minutes)}</td></tr>
+    <tr><td>Score riesgo</td><td>${fmt.n(route.risk_score_minutes, 1)}</td></tr>
+    <tr><td>Score eco</td><td>${fmt.n(route.eco_score_minutes, 1)}</td></tr>
+    <tr><td>Incertidumbre media</td><td>${fmt.n(route.uncertainty_score, 2)}</td></tr>
+    <tr><td>Prob. llegada en hora</td><td>${reliabilityPct}%</td></tr>
     <tr><td>Aristas con telemetria live</td><td>${(route.edges || []).filter((e) => Number(e.live_sample_count || 0) > 0).length}</td></tr>
     <tr><td>Factor meteo global</td><td>${fmt.n(route.weather_factor, 2)}</td></tr>
     <tr><td>Factor meteo aplicado</td><td>${fmt.n(effectiveWeatherFactor, 2)} (${effectiveImpactLevel.toUpperCase()})</td></tr>
+    <tr><td>Explicacion IA</td><td>${explain.length ? explain.join(" | ") : "-"}</td></tr>
   `;
   applyTableSortState("route-table");
 }
@@ -1415,7 +1609,7 @@ function renderRouteCandidates(candidates, selectedRoute = null) {
   if (!tbody) return;
   const rows = Array.isArray(candidates) ? candidates : [];
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6">Sin candidatas calculadas</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7">Sin candidatas calculadas</td></tr>`;
     applyTableSortState("route-candidates-table");
     return;
   }
@@ -1424,13 +1618,16 @@ function renderRouteCandidates(candidates, selectedRoute = null) {
     .map((cand) => {
       const isSelected = (cand?.path || []).join("|") === selectedPath;
       const delta = Number(cand?.delta_vs_best_minutes || 0);
+      const deltaWeight = Number(cand?.delta_vs_best_weight || 0);
       const deltaLabel = delta > 0 ? `+${fmt.hm(delta)}` : delta < 0 ? `-${fmt.hm(Math.abs(delta))}` : "0 min";
+      const deltaWeightLabel = deltaWeight > 0 ? `+${fmt.n(deltaWeight, 2)}` : fmt.n(deltaWeight, 2);
       return `
       <tr class="${isSelected ? "route-hit" : ""}">
         <td>${cand.rank || "-"}</td>
         <td>${(cand.path || []).join(" -> ")}</td>
         <td>${fmt.hm(cand.estimated_travel_minutes)}</td>
         <td>${deltaLabel}</td>
+        <td>${deltaWeightLabel}</td>
         <td>${fmt.n(cand.total_distance_km, 1)}</td>
         <td>+${fmt.hm(cand.weather_penalty_minutes)}</td>
       </tr>
@@ -1741,6 +1938,10 @@ async function calculateRoute() {
   const source = document.getElementById("source-select").value;
   const target = document.getElementById("target-select").value;
   const profile = document.getElementById("profile-select").value;
+  const temporalMode = document.getElementById("temporal-mode-select")?.value || "auto";
+  state.temporalMode = temporalMode;
+  updateObjectiveWeightLabels();
+  const objective = normalizedObjectiveWeights();
   const avoidedNodes = getAvoidNodesSelection().filter((id) => id !== source && id !== target);
 
   if (!source || !target) {
@@ -1772,7 +1973,11 @@ async function calculateRoute() {
           source,
           target,
           profile,
-          alternatives: "4"
+          alternatives: "4",
+          temporal_mode: temporalMode,
+          objective_time: String(objective.time),
+          objective_risk: String(objective.risk),
+          objective_eco: String(objective.eco)
         });
         if (avoidedNodes.length) params.set("avoid_nodes", avoidedNodes.join(","));
         return `/api/network/best-route?${params.toString()}`;
@@ -1865,6 +2070,23 @@ function bindEvents() {
     if (insightsProfileSelect) insightsProfileSelect.value = profile;
     calculateRoute();
   });
+  document.getElementById("temporal-mode-select").addEventListener("change", () => {
+    state.temporalMode = document.getElementById("temporal-mode-select").value || "auto";
+    calculateRoute();
+  });
+  ["objective-time", "objective-risk", "objective-eco"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener("input", () => {
+      updateObjectiveWeightLabels();
+      scheduleRouteRecalc(250);
+    });
+    input.addEventListener("change", () => {
+      updateObjectiveWeightLabels();
+      calculateRoute();
+    });
+  });
+  document.getElementById("retrain-btn").addEventListener("click", triggerRetrain);
   document.getElementById("insights-profile-select").addEventListener("change", async () => {
     state.insightsProfile = document.getElementById("insights-profile-select").value || "balanced";
     await refreshNetworkInsightsOnly();
@@ -1892,17 +2114,20 @@ async function bootstrap() {
   initTheme();
   state.insightsProfile = document.getElementById("insights-profile-select")?.value || "balanced";
   state.insightsMinCongestion = document.getElementById("insights-congestion-select")?.value || "all";
+  state.temporalMode = document.getElementById("temporal-mode-select")?.value || "auto";
   const routeProfile = document.getElementById("profile-select");
   if (routeProfile) routeProfile.value = state.insightsProfile;
+  updateObjectiveWeightLabels();
   bindSortableTables();
   applyTableHeaderTooltips();
   bindEvents();
-  await Promise.all([refreshFleet(), loadGraph()]);
+  await Promise.all([refreshFleet(), loadGraph(), refreshRetrainStatus()]);
   await calculateRoute();
 
   if (state.animationTimer) clearInterval(state.animationTimer);
   state.animationTimer = setInterval(async () => {
     await refreshFleet();
+    await refreshRetrainStatus();
     if (state.playback) await refreshVehicleHistory();
   }, 12000);
 }

@@ -25,12 +25,16 @@ import heapq
 import json
 import math
 import os
+import subprocess
+import threading
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 try:
     from cassandra.cluster import Cluster
@@ -60,6 +64,33 @@ LIVE_EDGE_BLEND_MAX = float(os.getenv("LIVE_EDGE_BLEND_MAX", "0.65"))
 LIVE_EDGE_MIN_SAMPLES = int(os.getenv("LIVE_EDGE_MIN_SAMPLES", "1"))
 INSIGHTS_PERSIST_INTERVAL_SECONDS = int(os.getenv("INSIGHTS_PERSIST_INTERVAL_SECONDS", "60"))
 _INSIGHTS_LAST_PERSIST = {}
+ROUTING_TZ = os.getenv("ROUTING_TZ", "Europe/Madrid")
+RETRAIN_COMMAND = os.getenv("RETRAIN_COMMAND", "docker exec spark-client /opt/spark-app/run-batch.sh")
+RETRAIN_TIMEOUT_SECONDS = int(os.getenv("RETRAIN_TIMEOUT_SECONDS", "3600"))
+RETRAIN_RECOMMEND_THRESHOLD = int(os.getenv("RETRAIN_RECOMMEND_THRESHOLD", "55"))
+RETRAIN_RECOMMEND_ON_THRESHOLD = int(os.getenv("RETRAIN_RECOMMEND_ON_THRESHOLD", "70"))
+RETRAIN_RECOMMEND_OFF_THRESHOLD = int(os.getenv("RETRAIN_RECOMMEND_OFF_THRESHOLD", "55"))
+RETRAIN_COOLDOWN_HOURS = int(os.getenv("RETRAIN_COOLDOWN_HOURS", "48"))
+RETRAIN_STATUS_POLL_CACHE_SECONDS = int(os.getenv("RETRAIN_STATUS_POLL_CACHE_SECONDS", "30"))
+RETRAIN_STATE_TABLE = os.getenv("CASSANDRA_RETRAIN_STATE_TABLE", "model_retrain_state")
+RETRAIN_MODEL_NAME = os.getenv("RETRAIN_MODEL_NAME", "delay_risk_rf")
+_RETRAIN_LOCK = threading.Lock()
+_RETRAIN_STATE = {
+    "status": "idle",  # idle | running | done | error
+    "started_at": None,
+    "finished_at": None,
+    "duration_seconds": None,
+    "exit_code": None,
+    "trigger": None,
+    "message": "Sin ejecuciones de reentrenamiento en esta sesion.",
+    "output_tail": [],
+}
+_RETRAIN_ADVICE_CACHE = {"computed_at": None, "payload": None}
+
+
+def invalidate_retrain_advice_cache():
+    _RETRAIN_ADVICE_CACHE["computed_at"] = None
+    _RETRAIN_ADVICE_CACHE["payload"] = None
 
 
 def parse_iso_utc(value: str):
@@ -75,6 +106,495 @@ def parse_iso_utc(value: str):
 def to_iso(dt: datetime):
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
+
+def now_utc():
+    return datetime.now(timezone.utc)
+
+
+def _clamp(value: float, low: float, high: float):
+    return max(low, min(high, value))
+
+
+def _parse_float(value, default: float):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _routing_now_local(temporal_mode: str):
+    mode = str(temporal_mode or "auto").strip().lower()
+    try:
+        tzinfo = ZoneInfo(ROUTING_TZ)
+    except Exception:
+        tzinfo = timezone.utc
+    now_local = datetime.now(tzinfo)
+    if mode == "peak":
+        # Hora punta simulada para comparativa reproducible.
+        return now_local.replace(hour=8, minute=30, second=0, microsecond=0)
+    if mode == "night":
+        return now_local.replace(hour=1, minute=30, second=0, microsecond=0)
+    if mode == "offpeak":
+        return now_local.replace(hour=11, minute=30, second=0, microsecond=0)
+    return now_local
+
+
+def normalize_objective_weights(time_weight: float, risk_weight: float, eco_weight: float):
+    raw = {
+        "time": _clamp(_parse_float(time_weight, 1.0), 0.0, 10.0),
+        "risk": _clamp(_parse_float(risk_weight, 1.0), 0.0, 10.0),
+        "eco": _clamp(_parse_float(eco_weight, 1.0), 0.0, 10.0),
+    }
+    total = raw["time"] + raw["risk"] + raw["eco"]
+    if total <= 0:
+        return {"time": 1.0 / 3.0, "risk": 1.0 / 3.0, "eco": 1.0 / 3.0}
+    return {k: (v / total) for k, v in raw.items()}
+
+
+def temporal_factor_for_edge(edge, temporal_mode: str = "auto"):
+    now_local = _routing_now_local(temporal_mode)
+    weekday = now_local.weekday() < 5
+    hour = now_local.hour
+    distance = float(edge.get("distance_km") or 0.0)
+    congestion = str(edge.get("congestion_level") or "unknown").strip().lower()
+
+    # Penalizacion por hora punta en dias laborables, sobre todo en tramos congestionados.
+    if weekday and ((7 <= hour <= 10) or (17 <= hour <= 20)):
+        base = 1.13
+        if congestion == "high":
+            base += 0.08
+        elif congestion == "medium":
+            base += 0.05
+        return min(1.32, base + min(0.06, distance / 5000.0))
+
+    # Horario nocturno: menor friccion en tramo urbano/interurbano.
+    if hour >= 22 or hour <= 5:
+        base = 0.94
+        if congestion == "high":
+            base = 1.0
+        return max(0.88, base - min(0.03, distance / 9000.0))
+
+    # Horario valle diurno.
+    return 1.0
+
+
+def edge_uncertainty_index(delay: float, congestion_weight: float, live_samples: int):
+    telemetry_component = 1.0 / (1.0 + min(8.0, max(0, live_samples)) * 0.7)
+    delay_component = min(1.3, max(0.0, delay - 4.0) / 14.0)
+    congestion_component = (congestion_weight - 1.0) * 0.95
+    return telemetry_component + delay_component + congestion_component
+
+
+def _route_explanation(route, objective_weights):
+    weather_pen = float(route.get("weather_penalty_minutes") or 0.0)
+    risk_minutes = float(route.get("risk_score_minutes") or 0.0)
+    eco_minutes = float(route.get("eco_score_minutes") or 0.0)
+    uncertainty = float(route.get("uncertainty_score") or 0.0)
+    time_weight = float((objective_weights or {}).get("time") or 0.0)
+    risk_weight = float((objective_weights or {}).get("risk") or 0.0)
+    eco_weight = float((objective_weights or {}).get("eco") or 0.0)
+
+    factors = [
+        (weather_pen * max(0.4, time_weight + risk_weight), f"Impacto meteorologico: +{round(weather_pen, 1)} min"),
+        (
+            risk_minutes * max(0.5, risk_weight),
+            f"Riesgo operativo acumulado: {round(risk_minutes, 1)} pts",
+        ),
+        (
+            eco_minutes * max(0.5, eco_weight),
+            f"Coste eco (distancia + stop&go): {round(eco_minutes, 1)} pts",
+        ),
+        (
+            uncertainty * max(0.5, risk_weight),
+            f"Incertidumbre de red: {round(uncertainty, 2)}",
+        ),
+    ]
+    factors.sort(key=lambda x: x[0], reverse=True)
+    return [text for _, text in factors[:3]]
+
+
+def _run_retrain_worker(trigger: str):
+    started = now_utc()
+    with _RETRAIN_LOCK:
+        _RETRAIN_STATE["status"] = "running"
+        _RETRAIN_STATE["started_at"] = to_iso(started)
+        _RETRAIN_STATE["finished_at"] = None
+        _RETRAIN_STATE["duration_seconds"] = None
+        _RETRAIN_STATE["exit_code"] = None
+        _RETRAIN_STATE["trigger"] = trigger
+        _RETRAIN_STATE["message"] = "Reentrenamiento en ejecucion..."
+        _RETRAIN_STATE["output_tail"] = []
+
+    output_tail = []
+    try:
+        proc = subprocess.Popen(
+            RETRAIN_COMMAND,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        deadline = time.time() + max(30, RETRAIN_TIMEOUT_SECONDS)
+        while True:
+            line = proc.stdout.readline() if proc.stdout else ""
+            if line:
+                output_tail.append(line.rstrip())
+                if len(output_tail) > 120:
+                    output_tail = output_tail[-120:]
+            if proc.poll() is not None:
+                break
+            if time.time() > deadline:
+                proc.kill()
+                raise TimeoutError(f"Timeout de reentrenamiento ({RETRAIN_TIMEOUT_SECONDS}s)")
+        exit_code = int(proc.returncode or 0)
+        status = "done" if exit_code == 0 else "error"
+        msg = "Reentrenamiento completado correctamente." if exit_code == 0 else f"Reentrenamiento fallo con exit_code={exit_code}."
+    except Exception as exc:
+        status = "error"
+        exit_code = 124 if isinstance(exc, TimeoutError) else 1
+        msg = f"Error ejecutando reentrenamiento: {exc}"
+
+    finished = now_utc()
+    with _RETRAIN_LOCK:
+        _RETRAIN_STATE["status"] = status
+        _RETRAIN_STATE["finished_at"] = to_iso(finished)
+        _RETRAIN_STATE["duration_seconds"] = round((finished - started).total_seconds(), 2)
+        _RETRAIN_STATE["exit_code"] = exit_code
+        _RETRAIN_STATE["message"] = msg
+        _RETRAIN_STATE["output_tail"] = output_tail[-40:]
+    persist_retrain_runtime_state(
+        status=status,
+        trigger=trigger,
+        started_at=started,
+        finished_at=finished,
+        duration_seconds=round((finished - started).total_seconds(), 2),
+        exit_code=exit_code,
+        message=msg,
+    )
+
+
+def start_retrain_if_idle(trigger: str = "manual"):
+    with _RETRAIN_LOCK:
+        if _RETRAIN_STATE.get("status") == "running":
+            return False, dict(_RETRAIN_STATE)
+        _RETRAIN_STATE["status"] = "running"
+        _RETRAIN_STATE["started_at"] = to_iso(now_utc())
+        _RETRAIN_STATE["finished_at"] = None
+        _RETRAIN_STATE["duration_seconds"] = None
+        _RETRAIN_STATE["exit_code"] = None
+        _RETRAIN_STATE["trigger"] = trigger
+        _RETRAIN_STATE["message"] = "Reentrenamiento en cola..."
+        _RETRAIN_STATE["output_tail"] = []
+        invalidate_retrain_advice_cache()
+        worker = threading.Thread(target=_run_retrain_worker, args=(trigger,), daemon=True)
+        worker.start()
+        return True, dict(_RETRAIN_STATE)
+
+
+def _retrain_default_persisted_state():
+    return {
+        "model_name": RETRAIN_MODEL_NAME,
+        "last_success_at": None,
+        "last_run_at": None,
+        "last_status": None,
+        "last_recommendation": None,
+        "last_score": None,
+        "updated_at": None,
+        "source": "none",
+    }
+
+
+def load_persisted_retrain_state():
+    if Cluster is None:
+        state = _retrain_default_persisted_state()
+        state["source"] = "driver_missing"
+        return state
+
+    cluster = None
+    session = None
+    try:
+        cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
+        session = cluster.connect()
+        session.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
+                model_name text PRIMARY KEY,
+                last_success_at timestamp,
+                last_run_at timestamp,
+                last_status text,
+                last_recommendation boolean,
+                last_score int,
+                updated_at timestamp
+            )
+            """
+        )
+        row = session.execute(
+            f"SELECT model_name, last_success_at, last_run_at, last_status, "
+            f"last_recommendation, last_score, updated_at "
+            f"FROM {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} WHERE model_name=%s",
+            [RETRAIN_MODEL_NAME],
+        ).one()
+        if row is None:
+            state = _retrain_default_persisted_state()
+            state["source"] = "cassandra_empty"
+            return state
+        return {
+            "model_name": str(getattr(row, "model_name", RETRAIN_MODEL_NAME) or RETRAIN_MODEL_NAME),
+            "last_success_at": _to_event_time(getattr(row, "last_success_at", None)),
+            "last_run_at": _to_event_time(getattr(row, "last_run_at", None)),
+            "last_status": getattr(row, "last_status", None),
+            "last_recommendation": getattr(row, "last_recommendation", None),
+            "last_score": int(getattr(row, "last_score", 0) or 0) if getattr(row, "last_score", None) is not None else None,
+            "updated_at": _to_event_time(getattr(row, "updated_at", None)),
+            "source": "cassandra",
+        }
+    except Exception:
+        state = _retrain_default_persisted_state()
+        state["source"] = "cassandra_error"
+        return state
+    finally:
+        try:
+            session.shutdown()
+        except Exception:
+            pass
+        try:
+            cluster.shutdown()
+        except Exception:
+            pass
+
+
+def persist_retrain_runtime_state(status, trigger, started_at, finished_at, duration_seconds, exit_code, message):
+    if Cluster is None:
+        return
+    cluster = None
+    session = None
+    try:
+        cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
+        session = cluster.connect()
+        session.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
+                model_name text PRIMARY KEY,
+                last_success_at timestamp,
+                last_run_at timestamp,
+                last_status text,
+                last_recommendation boolean,
+                last_score int,
+                updated_at timestamp
+            )
+            """
+        )
+        previous = session.execute(
+            f"SELECT last_success_at, last_recommendation, last_score FROM {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
+            f"WHERE model_name=%s",
+            [RETRAIN_MODEL_NAME],
+        ).one()
+        prev_success = getattr(previous, "last_success_at", None) if previous else None
+        prev_recommendation = getattr(previous, "last_recommendation", None) if previous else None
+        prev_score = getattr(previous, "last_score", None) if previous else None
+        new_success = finished_at if status == "done" else prev_success
+        session.execute(
+            f"INSERT INTO {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
+            f"(model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, updated_at) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [
+                RETRAIN_MODEL_NAME,
+                new_success,
+                finished_at,
+                str(status),
+                prev_recommendation,
+                int(prev_score) if prev_score is not None else None,
+                now_utc(),
+            ],
+        )
+        invalidate_retrain_advice_cache()
+    except Exception:
+        return
+    finally:
+        try:
+            session.shutdown()
+        except Exception:
+            pass
+        try:
+            cluster.shutdown()
+        except Exception:
+            pass
+
+
+def persist_retrain_advice_state(recommended: bool, score: int):
+    if Cluster is None:
+        return
+    persisted = load_persisted_retrain_state()
+    last_success = parse_iso_utc(persisted.get("last_success_at")) if persisted.get("last_success_at") else None
+    last_run = parse_iso_utc(persisted.get("last_run_at")) if persisted.get("last_run_at") else None
+    cluster = None
+    session = None
+    try:
+        cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
+        session = cluster.connect()
+        session.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
+                model_name text PRIMARY KEY,
+                last_success_at timestamp,
+                last_run_at timestamp,
+                last_status text,
+                last_recommendation boolean,
+                last_score int,
+                updated_at timestamp
+            )
+            """
+        )
+        session.execute(
+            f"INSERT INTO {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
+            f"(model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, updated_at) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            [
+                RETRAIN_MODEL_NAME,
+                last_success,
+                last_run,
+                persisted.get("last_status"),
+                bool(recommended),
+                int(score),
+                now_utc(),
+            ],
+        )
+        invalidate_retrain_advice_cache()
+    except Exception:
+        return
+    finally:
+        try:
+            session.shutdown()
+        except Exception:
+            pass
+        try:
+            cluster.shutdown()
+        except Exception:
+            pass
+
+
+def _compute_retrain_advice_payload():
+    events = load_gps_events(max_files=60, max_events=3000)
+    weather_rows, _weather_source, _weather_meta = load_weather_latest(limit=12)
+    warehouses = read_warehouses()
+    vertices, edges = load_route_graph()
+    warehouse_aliases = build_warehouse_aliases(vertices)
+    latest_rows, _source, _meta = load_vehicle_latest_preferred(events, warehouse_aliases, limit=200)
+    overview = build_overview_from_latest_vehicle_state(latest_rows, weather_rows)
+    _edges_with_live, live_edge_summary = apply_live_edge_telemetry(edges, latest_rows)
+
+    score = 0
+    reasons = []
+    avg_delay = float(overview.get("avg_delay_minutes") or 0.0)
+    weather_factor = float(overview.get("weather_factor") or 0.0)
+    latest_event = parse_iso_utc(overview.get("latest_event_time"))
+    age_minutes = None
+    if latest_event:
+        age_minutes = (now_utc() - latest_event).total_seconds() / 60.0
+    vehicles_considered = int(live_edge_summary.get("vehicles_considered") or 0)
+    edges_with_live_samples = int(live_edge_summary.get("edges_with_live_samples") or 0)
+    live_coverage_ratio = 0.0 if not edges else edges_with_live_samples / max(1, len(edges))
+
+    persisted = load_persisted_retrain_state()
+    last_success = parse_iso_utc(persisted.get("last_success_at")) if persisted.get("last_success_at") else None
+    previous_recommendation = persisted.get("last_recommendation")
+
+    if last_success is None:
+        score += 16
+        reasons.append("No hay constancia persistida de reentrenamiento exitoso.")
+    else:
+        hours_since_success = (now_utc() - last_success).total_seconds() / 3600.0
+        if hours_since_success >= 24 * 7:
+            score += 26
+            reasons.append(f"Ultimo reentrenamiento exitoso hace {round(hours_since_success / 24.0, 1)} dias.")
+        elif hours_since_success >= 24 * 3:
+            score += 12
+            reasons.append(f"Han pasado {round(hours_since_success / 24.0, 1)} dias desde el ultimo reentrenamiento exitoso.")
+
+    if avg_delay >= 14:
+        score += 24
+        reasons.append(f"Delay medio elevado ({round(avg_delay, 1)} min).")
+    elif avg_delay >= 9:
+        score += 12
+        reasons.append(f"Delay medio moderado-alto ({round(avg_delay, 1)} min).")
+
+    if weather_factor >= 1.2:
+        score += 8
+        reasons.append(f"Condiciones meteo exigentes (factor {round(weather_factor, 2)}).")
+
+    if live_coverage_ratio < 0.32:
+        score += 15
+        reasons.append(f"Baja cobertura live en aristas ({round(live_coverage_ratio * 100, 1)}%).")
+    elif live_coverage_ratio < 0.5:
+        score += 7
+        reasons.append(f"Cobertura live mejorable ({round(live_coverage_ratio * 100, 1)}%).")
+
+    if age_minutes is not None and age_minutes > 180:
+        score += 9
+        reasons.append(f"Ultimo evento con {round(age_minutes)} min de antiguedad.")
+
+    score = int(_clamp(score, 0, 100))
+    threshold_on = max(RETRAIN_RECOMMEND_THRESHOLD, RETRAIN_RECOMMEND_ON_THRESHOLD)
+    threshold_off = min(RETRAIN_RECOMMEND_THRESHOLD, RETRAIN_RECOMMEND_OFF_THRESHOLD)
+
+    recommended = bool(score >= threshold_on)
+    if previous_recommendation is not None:
+        if bool(previous_recommendation):
+            recommended = bool(score >= threshold_off)
+        else:
+            recommended = bool(score >= threshold_on)
+
+    cooldown_remaining_hours = 0.0
+    if last_success is not None and RETRAIN_COOLDOWN_HOURS > 0:
+        hours_since_success = (now_utc() - last_success).total_seconds() / 3600.0
+        if hours_since_success < RETRAIN_COOLDOWN_HOURS:
+            cooldown_remaining_hours = max(0.0, RETRAIN_COOLDOWN_HOURS - hours_since_success)
+            recommended = False
+            reasons.insert(
+                0,
+                f"En enfriamiento tras reentreno exitoso: faltan {round(cooldown_remaining_hours, 1)} h para nueva recomendacion.",
+            )
+
+    persist_retrain_advice_state(recommended=recommended, score=score)
+    if not reasons:
+        reasons.append("Metricas estables: no se observan sintomas fuertes de deriva.")
+    return {
+        "recommended": recommended,
+        "score": score,
+        "threshold": RETRAIN_RECOMMEND_THRESHOLD,
+        "threshold_on": threshold_on,
+        "threshold_off": threshold_off,
+        "reasons": reasons[:5],
+        "cooldown_hours": RETRAIN_COOLDOWN_HOURS,
+        "cooldown_remaining_hours": round(cooldown_remaining_hours, 2),
+        "persisted_state": {
+            "last_success_at": persisted.get("last_success_at"),
+            "last_status": persisted.get("last_status"),
+            "last_recommendation": persisted.get("last_recommendation"),
+            "source": persisted.get("source"),
+        },
+        "metrics": {
+            "avg_delay_minutes": round(avg_delay, 2),
+            "weather_factor": round(weather_factor, 3),
+            "live_coverage_ratio": round(live_coverage_ratio, 3),
+            "vehicles_considered": vehicles_considered,
+            "latest_event_age_minutes": round(age_minutes, 1) if age_minutes is not None else None,
+        },
+    }
+
+
+def get_retrain_advice_cached():
+    now = now_utc()
+    cached_at = _RETRAIN_ADVICE_CACHE.get("computed_at")
+    cached_payload = _RETRAIN_ADVICE_CACHE.get("payload")
+    if cached_at and cached_payload:
+        age = (now - cached_at).total_seconds()
+        if age <= RETRAIN_STATUS_POLL_CACHE_SECONDS:
+            return cached_payload
+    payload = _compute_retrain_advice_payload()
+    _RETRAIN_ADVICE_CACHE["computed_at"] = now
+    _RETRAIN_ADVICE_CACHE["payload"] = payload
+    return payload
 
 def list_latest_files(path: Path, pattern: str, limit: int):
     # Devuelve los ficheros mas recientes por fecha de modificacion.
@@ -386,11 +906,12 @@ def filter_rows_by_vehicle_ids(rows, allowed_ids):
     return [row for row in rows if str(row.get("vehicle_id") or "") in allowed_ids]
 
 
-def edge_weight(edge, profile: str, weather_factor: float):
+def edge_weight(edge, profile: str, weather_factor: float, objective_weights=None, temporal_mode: str = "auto"):
     # Calcula coste de arista para routing segun perfil y clima.
-    # Retorna (total, base, penalizacion_meteo).
+    # Retorna metricas de coste (operativas + optimizacion).
+    objective_weights = objective_weights or {"time": 1.0 / 3.0, "risk": 1.0 / 3.0, "eco": 1.0 / 3.0}
     profile = str(profile or "balanced").strip().lower()
-    if profile not in {"balanced", "fastest", "resilient", "eco", "low_risk"}:
+    if profile not in {"balanced", "fastest", "resilient", "eco", "low_risk", "reliable"}:
         profile = "balanced"
     distance = edge["distance_km"]
     delay = float(edge.get("effective_avg_delay_minutes", edge.get("avg_delay_minutes", 0.0)))
@@ -404,40 +925,86 @@ def edge_weight(edge, profile: str, weather_factor: float):
     elif congestion == "low":
         congestion_weight = 1.0
 
+    temporal_factor = temporal_factor_for_edge(edge, temporal_mode=temporal_mode)
+    uncertainty = edge_uncertainty_index(delay, congestion_weight, live_samples)
+    weather_multiplier = max(0.5, temporal_factor)
+
+    if profile == "reliable":
+        # Minimiza variabilidad de ETA: fuerte castigo a incertidumbre y climatologia.
+        base = (distance / 71.0) * 60.0 + (delay * 1.35)
+        weather_penalty = (delay * weather_factor * 2.8 * weather_multiplier) + ((congestion_weight - 1.0) * 16.0)
+        risk_component = (uncertainty * 14.0) + (max(0.0, delay - 6.0) ** 1.15) * 1.2
+        eco_component = (distance * 0.085) + (delay * 0.32) + ((congestion_weight - 1.0) * 4.2)
+        operational_total = base + weather_penalty + (uncertainty * 2.4)
+        routing_weight = (
+            operational_total * float(objective_weights.get("time", 0.0))
+            + risk_component * float(objective_weights.get("risk", 0.0))
+            + eco_component * float(objective_weights.get("eco", 0.0))
+        )
+        return {
+            "routing_weight": routing_weight,
+            "base_minutes": base,
+            "weather_penalty_minutes": weather_penalty,
+            "total_minutes": operational_total,
+            "uncertainty_index": uncertainty,
+            "risk_component_minutes": risk_component,
+            "eco_component_minutes": eco_component,
+            "temporal_factor": temporal_factor,
+        }
+
     if profile == "fastest":
         # Prioriza tiempo puro y tolera peor climatologia/congestion.
         base = (distance / 100.0) * 60.0 + (delay * 0.55)
-        penalty = (delay * weather_factor * 0.8) + ((congestion_weight - 1.0) * 4.0)
-        return base + penalty, base, penalty
-    if profile == "resilient":
+        weather_penalty = (delay * weather_factor * 0.8 * weather_multiplier) + ((congestion_weight - 1.0) * 4.0)
+    elif profile == "resilient":
         # Penaliza fuerte la climatologia y la congestion para evitar tramos "fragiles".
         base = (distance / 62.0) * 60.0 + (delay * 1.65)
-        penalty = (
-            (delay * weather_factor * 2.6)
+        weather_penalty = (
+            (delay * weather_factor * 2.6 * weather_multiplier)
             + ((congestion_weight - 1.0) * 14.0)
             + (max(0.0, delay - 8.0) ** 1.2) * 0.9
         )
-        return base + penalty, base, penalty
-    if profile == "eco":
+    elif profile == "eco":
         # Favorece tramos eficientes (menos km, menos stop&go, menos delay).
         base = (distance / 74.0) * 60.0 + (delay * 1.2) + (distance * 0.018)
-        penalty = (delay * weather_factor * 1.2) + ((congestion_weight - 1.0) * 10.0) + (max(0.0, delay - 6.0) ** 1.12) * 0.55
-        return base + penalty, base, penalty
-    if profile == "low_risk":
+        weather_penalty = (
+            (delay * weather_factor * 1.2 * weather_multiplier)
+            + ((congestion_weight - 1.0) * 10.0)
+            + (max(0.0, delay - 6.0) ** 1.12) * 0.55
+        )
+    elif profile == "low_risk":
         # Busca ETA estable: evita clima adverso, congestion y tramos con poca telemetria live.
         telemetry_risk = 1.9 if live_samples <= 0 else 1.0 / (1.0 + min(6.0, live_samples) * 0.65)
         base = (distance / 69.0) * 60.0 + (delay * 1.45)
-        penalty = (
-            (delay * weather_factor * 3.05)
+        weather_penalty = (
+            (delay * weather_factor * 3.05 * weather_multiplier)
             + ((congestion_weight - 1.0) * 17.0)
             + (max(0.0, delay - 7.0) ** 1.18) * 1.05
             + telemetry_risk * 3.0
         )
-        return base + penalty, base, penalty
-    # Balanceado: compromiso entre velocidad y robustez.
-    base = (distance / 76.0) * 60.0 + delay
-    penalty = (delay * weather_factor * 1.6) + ((congestion_weight - 1.0) * 7.0)
-    return base + penalty, base, penalty
+    else:
+        # Balanceado: compromiso entre velocidad y robustez.
+        base = (distance / 76.0) * 60.0 + delay
+        weather_penalty = (delay * weather_factor * 1.6 * weather_multiplier) + ((congestion_weight - 1.0) * 7.0)
+
+    risk_component = (uncertainty * 11.5) + (max(0.0, delay - 7.0) ** 1.08) + ((congestion_weight - 1.0) * 6.0)
+    eco_component = (distance * 0.075) + (delay * 0.42) + ((congestion_weight - 1.0) * 5.2)
+    operational_total = base + weather_penalty + (uncertainty * 1.8)
+    routing_weight = (
+        operational_total * float(objective_weights.get("time", 0.0))
+        + risk_component * float(objective_weights.get("risk", 0.0))
+        + eco_component * float(objective_weights.get("eco", 0.0))
+    )
+    return {
+        "routing_weight": routing_weight,
+        "base_minutes": base,
+        "weather_penalty_minutes": weather_penalty,
+        "total_minutes": operational_total,
+        "uncertainty_index": uncertainty,
+        "risk_component_minutes": risk_component,
+        "eco_component_minutes": eco_component,
+        "temporal_factor": temporal_factor,
+    }
 
 
 def route_weather_factor(base_weather_factor: float, path_edges):
@@ -451,7 +1018,7 @@ def route_weather_factor(base_weather_factor: float, path_edges):
     return min(base_weather_factor * multiplier, 3.2)
 
 
-def build_weighted_graph(edges, profile: str, weather_factor: float, blocked_nodes=None):
+def build_weighted_graph(edges, profile: str, weather_factor: float, blocked_nodes=None, objective_weights=None, temporal_mode: str = "auto"):
     blocked = {str(node) for node in (blocked_nodes or []) if node}
     graph = defaultdict(list)
     for edge in edges:
@@ -461,14 +1028,25 @@ def build_weighted_graph(edges, profile: str, weather_factor: float, blocked_nod
             continue
         if src in blocked or dst in blocked:
             continue
-        total_weight, base_weight, weather_penalty = edge_weight(edge, profile, weather_factor)
+        costs = edge_weight(
+            edge,
+            profile,
+            weather_factor,
+            objective_weights=objective_weights,
+            temporal_mode=temporal_mode,
+        )
         edge_with_costs = {
             **edge,
-            "base_minutes": round(base_weight, 2),
-            "weather_penalty_minutes": round(weather_penalty, 2),
-            "total_minutes": round(total_weight, 2),
+            "base_minutes": round(costs["base_minutes"], 2),
+            "weather_penalty_minutes": round(costs["weather_penalty_minutes"], 2),
+            "total_minutes": round(costs["total_minutes"], 2),
+            "uncertainty_index": round(costs["uncertainty_index"], 3),
+            "risk_component_minutes": round(costs["risk_component_minutes"], 2),
+            "eco_component_minutes": round(costs["eco_component_minutes"], 2),
+            "temporal_factor": round(costs["temporal_factor"], 3),
+            "routing_weight_minutes": round(costs["routing_weight"], 2),
         }
-        graph[src].append((dst, total_weight, edge_with_costs))
+        graph[src].append((dst, float(costs["routing_weight"]), edge_with_costs))
         reverse_edge = {
             "src": dst,
             "dst": src,
@@ -479,25 +1057,46 @@ def build_weighted_graph(edges, profile: str, weather_factor: float, blocked_nod
             "live_avg_speed_kmh": edge.get("live_avg_speed_kmh"),
             "live_sample_count": edge.get("live_sample_count"),
             "congestion_level": edge.get("congestion_level"),
-            "base_minutes": round(base_weight, 2),
-            "weather_penalty_minutes": round(weather_penalty, 2),
-            "total_minutes": round(total_weight, 2),
+            "base_minutes": round(costs["base_minutes"], 2),
+            "weather_penalty_minutes": round(costs["weather_penalty_minutes"], 2),
+            "total_minutes": round(costs["total_minutes"], 2),
+            "uncertainty_index": round(costs["uncertainty_index"], 3),
+            "risk_component_minutes": round(costs["risk_component_minutes"], 2),
+            "eco_component_minutes": round(costs["eco_component_minutes"], 2),
+            "temporal_factor": round(costs["temporal_factor"], 3),
+            "routing_weight_minutes": round(costs["routing_weight"], 2),
         }
-        graph[dst].append((src, total_weight, reverse_edge))
+        graph[dst].append((src, float(costs["routing_weight"]), reverse_edge))
     return graph
 
 
-def build_route_payload(profile, path_nodes, path_edges, weather_factor, avoided_nodes=None, rank=1):
+def build_route_payload(
+    profile,
+    path_nodes,
+    path_edges,
+    weather_factor,
+    avoided_nodes=None,
+    rank=1,
+    objective_weights=None,
+    temporal_mode: str = "auto",
+):
     total_distance = sum(float(e.get("distance_km") or 0.0) for e in path_edges)
     total_delay = sum(float(e.get("avg_delay_minutes") or 0.0) for e in path_edges)
     total_base = round(sum(float(e.get("base_minutes") or 0.0) for e in path_edges), 2)
     total_weather_penalty = round(sum(float(e.get("weather_penalty_minutes") or 0.0) for e in path_edges), 2)
+    total_risk_component = round(sum(float(e.get("risk_component_minutes") or 0.0) for e in path_edges), 2)
+    total_eco_component = round(sum(float(e.get("eco_component_minutes") or 0.0) for e in path_edges), 2)
+    total_routing_weight = round(sum(float(e.get("routing_weight_minutes") or 0.0) for e in path_edges), 2)
+    avg_uncertainty = (
+        round(sum(float(e.get("uncertainty_index") or 0.0) for e in path_edges) / len(path_edges), 3) if path_edges else 0.0
+    )
     effective_weather_factor = route_weather_factor(weather_factor, path_edges)
     if weather_factor > 0:
         scale = effective_weather_factor / weather_factor
         total_weather_penalty = round(total_weather_penalty * scale, 2)
     eta_minutes = round(total_base + total_weather_penalty, 2)
-    return {
+    reliability = round(_clamp(math.exp(-0.06 * max(0.0, total_risk_component)), 0.05, 0.99), 4)
+    payload = {
         "rank": int(rank),
         "profile": profile,
         "path": path_nodes,
@@ -512,17 +1111,48 @@ def build_route_payload(profile, path_nodes, path_edges, weather_factor, avoided
         "weather_impact_level": weather_impact_level(weather_factor),
         "route_weather_factor": round(effective_weather_factor, 3),
         "route_weather_impact_level": weather_impact_level(effective_weather_factor),
+        "objective_weights": {
+            "time": round(float((objective_weights or {}).get("time", 1.0 / 3.0)), 4),
+            "risk": round(float((objective_weights or {}).get("risk", 1.0 / 3.0)), 4),
+            "eco": round(float((objective_weights or {}).get("eco", 1.0 / 3.0)), 4),
+        },
+        "temporal_mode": str(temporal_mode or "auto"),
+        "routing_weight_minutes": total_routing_weight,
+        "risk_score_minutes": total_risk_component,
+        "eco_score_minutes": total_eco_component,
+        "uncertainty_score": avg_uncertainty,
+        "on_time_probability": reliability,
     }
+    payload["explain"] = _route_explanation(payload, payload.get("objective_weights"))
+    return payload
 
 
-def find_candidate_routes(vertices, edges, source, target, profile, weather_factor, avoid_nodes=None, k=3):
+def find_candidate_routes(
+    vertices,
+    edges,
+    source,
+    target,
+    profile,
+    weather_factor,
+    avoid_nodes=None,
+    k=3,
+    objective_weights=None,
+    temporal_mode: str = "auto",
+):
     blocked_nodes = {str(node) for node in (avoid_nodes or []) if node}
     blocked_nodes.discard(source)
     blocked_nodes.discard(target)
     vertex_ids = {str(v.get("id") or "") for v in vertices if v.get("id")}
     if source not in vertex_ids or target not in vertex_ids:
         return []
-    weighted_graph = build_weighted_graph(edges, profile, weather_factor, blocked_nodes=blocked_nodes)
+    weighted_graph = build_weighted_graph(
+        edges,
+        profile,
+        weather_factor,
+        blocked_nodes=blocked_nodes,
+        objective_weights=objective_weights,
+        temporal_mode=temporal_mode,
+    )
     if source not in weighted_graph or target not in vertex_ids:
         return []
 
@@ -544,7 +1174,18 @@ def find_candidate_routes(vertices, edges, source, target, profile, weather_fact
             if signature in seen_paths:
                 continue
             seen_paths.add(signature)
-            candidates.append(build_route_payload(profile, path_nodes, path_edges, weather_factor, blocked_nodes, rank=len(candidates) + 1))
+            candidates.append(
+                build_route_payload(
+                    profile,
+                    path_nodes,
+                    path_edges,
+                    weather_factor,
+                    blocked_nodes,
+                    rank=len(candidates) + 1,
+                    objective_weights=objective_weights,
+                    temporal_mode=temporal_mode,
+                )
+            )
             continue
 
         for neighbor, edge_cost, edge_data in weighted_graph.get(current, []):
@@ -557,12 +1198,19 @@ def find_candidate_routes(vertices, edges, source, target, profile, weather_fact
     return candidates
 
 
-def dijkstra(vertices, edges, source, target, profile, weather_factor, avoid_nodes=None):
+def dijkstra(vertices, edges, source, target, profile, weather_factor, avoid_nodes=None, objective_weights=None, temporal_mode: str = "auto"):
     # Motor de ruta minima: construye camino y metricas agregadas del trayecto.
     blocked_nodes = {str(node) for node in (avoid_nodes or []) if node}
     blocked_nodes.discard(source)
     blocked_nodes.discard(target)
-    graph = build_weighted_graph(edges, profile, weather_factor, blocked_nodes=blocked_nodes)
+    graph = build_weighted_graph(
+        edges,
+        profile,
+        weather_factor,
+        blocked_nodes=blocked_nodes,
+        objective_weights=objective_weights,
+        temporal_mode=temporal_mode,
+    )
 
     dist = {node["id"]: math.inf for node in vertices if node["id"] not in blocked_nodes}
     prev = {}
@@ -602,7 +1250,16 @@ def dijkstra(vertices, edges, source, target, profile, weather_factor, avoid_nod
     path_nodes.reverse()
     path_edges.reverse()
 
-    return build_route_payload(profile, path_nodes, path_edges, weather_factor, blocked_nodes, rank=1)
+    return build_route_payload(
+        profile,
+        path_nodes,
+        path_edges,
+        weather_factor,
+        blocked_nodes,
+        rank=1,
+        objective_weights=objective_weights,
+        temporal_mode=temporal_mode,
+    )
 
 
 def _edge_key(src: str, dst: str):
@@ -763,7 +1420,10 @@ def compute_network_insights(vertices, edges, profile="balanced", min_congestion
         effective_delay = float(edge.get("effective_avg_delay_minutes", edge.get("avg_delay_minutes") or 0.0))
         live_samples = int(edge.get("live_sample_count") or 0)
         raw_congestion = str(edge.get("congestion_level") or "unknown")
-        total_minutes, base_minutes, weather_penalty = edge_weight(edge, profile, weather_factor)
+        costs = edge_weight(edge, profile, weather_factor)
+        total_minutes = float(costs.get("total_minutes") or 0.0)
+        base_minutes = float(costs.get("base_minutes") or 0.0)
+        weather_penalty = float(costs.get("weather_penalty_minutes") or 0.0)
         congestion = _resolved_congestion_level(raw_congestion, effective_delay, total_minutes)
         if _congestion_rank(congestion) < min_rank:
             continue
@@ -785,6 +1445,8 @@ def compute_network_insights(vertices, edges, profile="balanced", min_congestion
             profile_multiplier = 0.97
         elif profile == "low_risk":
             profile_multiplier = 0.9
+        elif profile == "reliable":
+            profile_multiplier = 0.88
         impact_score = total_minutes * congestion_multiplier * live_multiplier * distance_multiplier * profile_multiplier
 
         bottlenecks.append(
@@ -1628,9 +2290,57 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         self._serve_static(parsed.path)
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+        if parsed.path.startswith("/api/"):
+            self._handle_api_post(parsed.path, query)
+            return
+        self._json({"error": "metodo no soportado"}, status=HTTPStatus.METHOD_NOT_ALLOWED)
+
+    def _read_json_body(self):
+        try:
+            raw_len = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            raw_len = 0
+        if raw_len <= 0:
+            return {}
+        try:
+            body = self.rfile.read(raw_len)
+            return json.loads(body.decode("utf-8"))
+        except Exception:
+            return {}
+
+    def _handle_api_post(self, path, _query):
+        if path == "/api/ml/retrain":
+            payload = self._read_json_body()
+            trigger = str(payload.get("trigger") or "manual_dashboard")
+            started, state = start_retrain_if_idle(trigger=trigger)
+            advice = get_retrain_advice_cached()
+            status_code = HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT
+            self._json(
+                {
+                    "started": started,
+                    "state": state,
+                    "advice": advice,
+                    "command": RETRAIN_COMMAND,
+                },
+                status=status_code,
+            )
+            return
+
+        self._json({"error": "endpoint no soportado"}, status=HTTPStatus.NOT_FOUND)
+
     def _handle_api(self, path, query):
         # Cada request recompone contexto fresco (eventos/clima/grafo) para
         # priorizar consistencia de demo sobre cache agresiva.
+        if path == "/api/ml/retrain/status":
+            with _RETRAIN_LOCK:
+                state = dict(_RETRAIN_STATE)
+            advice = get_retrain_advice_cached()
+            self._json({"state": state, "advice": advice, "command": RETRAIN_COMMAND})
+            return
+
         events = load_gps_events()
         weather_rows, weather_source, weather_cassandra_meta = load_weather_latest(limit=30)
         vertices, edges = load_route_graph()
@@ -1785,6 +2495,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             source = (query.get("source") or [None])[0]
             target = (query.get("target") or [None])[0]
             profile = (query.get("profile") or ["balanced"])[0]
+            objective_weights = normalize_objective_weights(
+                (query.get("objective_time") or ["1"])[0],
+                (query.get("objective_risk") or ["1"])[0],
+                (query.get("objective_eco") or ["1"])[0],
+            )
+            temporal_mode = str((query.get("temporal_mode") or ["auto"])[0] or "auto").strip().lower()
+            if temporal_mode not in {"auto", "peak", "offpeak", "night"}:
+                temporal_mode = "auto"
             try:
                 alternatives = int((query.get("alternatives") or ["3"])[0] or 3)
             except ValueError:
@@ -1815,6 +2533,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "weather_impact_level": impact_level,
                         "route_weather_factor": round(weather_factor, 3),
                         "route_weather_impact_level": impact_level,
+                        "objective_weights": objective_weights,
+                        "temporal_mode": temporal_mode,
+                        "routing_weight_minutes": 0.0,
+                        "risk_score_minutes": 0.0,
+                        "eco_score_minutes": 0.0,
+                        "uncertainty_score": 0.0,
+                        "on_time_probability": 1.0,
+                        "explain": [
+                            "Origen y destino coinciden.",
+                            "No hay tramos intermedios que optimizar.",
+                            "Coste total de ruta igual a cero.",
+                        ],
                     }
                 self._json({"route": trivial_route, "candidates": [trivial_route], "live_edge_summary": live_edge_summary})
                 return
@@ -1828,6 +2558,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 weather_factor,
                 avoid_nodes=avoid_nodes,
                 k=alternatives,
+                objective_weights=objective_weights,
+                temporal_mode=temporal_mode,
             )
             if not candidates:
                 self._json({"error": "No se pudo calcular ruta para ese origen/destino"}, status=HTTPStatus.NOT_FOUND)
@@ -1837,6 +2569,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             for idx, cand in enumerate(candidates, start=1):
                 cand["rank"] = idx
                 cand["delta_vs_best_minutes"] = round(float(cand["estimated_travel_minutes"]) - float(best_route["estimated_travel_minutes"]), 2)
+                cand["delta_vs_best_weight"] = round(float(cand["routing_weight_minutes"]) - float(best_route["routing_weight_minutes"]), 2)
 
             self._json({"route": best_route, "candidates": candidates, "live_edge_summary": live_edge_summary})
             return

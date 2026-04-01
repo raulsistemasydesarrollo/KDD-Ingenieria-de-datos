@@ -19,7 +19,14 @@
           </div>
           <div id="fleet-freshness" class="fleet-freshness">Flota: sin datos</div>
         </div>
-        <button id="theme-btn" type="button">Modo claro</button>
+        <div class="header-actions">
+          <div class="model-ops">
+            <button id="retrain-btn" type="button">Reentrenar IA</button>
+            <span id="retrain-status" class="route-status">Modelo: estado no consultado</span>
+            <button id="theme-btn" type="button">Modo claro</button>
+          </div>
+          <div id="retrain-advice" class="model-advice">Recomendacion IA: pendiente de evaluacion.</div>
+        </div>
       </div>
     </header>
 
@@ -93,9 +100,28 @@
             <option value="resilient">Resiliente al clima</option>
             <option value="eco">Eco (consumo/emisiones)</option>
             <option value="low_risk">ETA estable (bajo riesgo)</option>
+            <option value="reliable">Fiabilidad ETA</option>
+          </select>
+          <label for="temporal-mode-select">Patron horario</label>
+          <select id="temporal-mode-select">
+            <option value="auto">Auto (segun hora actual)</option>
+            <option value="peak">Hora punta</option>
+            <option value="offpeak">Hora valle</option>
+            <option value="night">Nocturno</option>
           </select>
           <button id="route-btn">Calcular mejor ruta</button>
           <span id="route-status" class="route-status">Pendiente de calculo</span>
+        </div>
+        <div class="row objective-row">
+          <label for="objective-time">Peso tiempo</label>
+          <input id="objective-time" type="range" min="0" max="100" step="5" value="55" />
+          <span id="objective-time-value" class="objective-value">55%</span>
+          <label for="objective-risk">Peso riesgo</label>
+          <input id="objective-risk" type="range" min="0" max="100" step="5" value="30" />
+          <span id="objective-risk-value" class="objective-value">30%</span>
+          <label for="objective-eco">Peso eco</label>
+          <input id="objective-eco" type="range" min="0" max="100" step="5" value="15" />
+          <span id="objective-eco-value" class="objective-value">15%</span>
         </div>
         <div id="network-map"></div>
         <div class="legend" id="network-legend">
@@ -145,12 +171,13 @@
                 <th>Camino candidato</th>
                 <th>Tiempo estimado</th>
                 <th>Delta vs mejor</th>
+                <th>Delta optimizacion</th>
                 <th>Distancia (km)</th>
                 <th>Pen. meteo</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="6">Sin candidatas calculadas</td></tr>
+              <tr><td colspan="7">Sin candidatas calculadas</td></tr>
             </tbody>
           </table>
         </div>
@@ -168,6 +195,7 @@
             <option value="resilient">Resiliente</option>
             <option value="eco">Eco</option>
             <option value="low_risk">Bajo riesgo</option>
+            <option value="reliable">Fiabilidad ETA</option>
           </select>
           <label for="insights-congestion-select">Congestion minima</label>
           <select id="insights-congestion-select">
