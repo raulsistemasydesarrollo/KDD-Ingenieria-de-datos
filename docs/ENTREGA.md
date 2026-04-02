@@ -44,13 +44,14 @@
    - pesos `tiempo/riesgo/eco`,
    - modo temporal (`auto`, `peak`, `offpeak`, `night`),
    - exclusion de nodos intermedios.
-5. Rutas y proyecciones de vehiculo coherentes con plan de trayecto (`planned_origin`, `planned_destination`).
+5. Rutas y proyecciones de vehiculo coherentes con plan de trayecto (`planned_origin`, `planned_destination`, `planned_route_nodes`, `planned_route_label`).
 6. Estado operativo con fuentes primarias en Cassandra y fallback controlado.
 7. Insights de red live con historico persistido en Cassandra y consolidacion en Hive.
 8. Operativa de reentreno IA en dashboard:
    - `POST /api/ml/retrain`,
    - `GET /api/ml/retrain/status`,
-   - estado persistido en `transport.model_retrain_state`.
+   - estado persistido en `transport.model_retrain_state`,
+   - panel de cabecera con modelo en uso + candidatos y criterio de seleccion.
 9. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
 10. Entrenamiento ML robustecido con comparativa automatica entre `baseline_rf`, `tuned_baseline_rf` y `enhanced_rf`, seleccionando el menor RMSE en cada batch/reentreno.
     - `enhanced_rf` incorpora clima y congestion alineados temporalmente (ventanas de 15 minutos) y es el seleccionado en la validacion final de esta iteracion.
@@ -93,7 +94,7 @@
 - [ ] `Patron horario` y pesos `tiempo/riesgo/eco` afectan al calculo de ruta.
 - [ ] `Evitar nodos` modifica candidatas de ruta.
 - [ ] Boton `Reentrenar IA` operativo y estado visible.
-- [ ] Endpoint `GET /api/ml/retrain/status` devuelve `state` y `advice`.
+- [ ] Endpoint `GET /api/ml/retrain/status` devuelve `state`, `advice` y `model_info`.
 
 ### 3.4 Documentacion
 

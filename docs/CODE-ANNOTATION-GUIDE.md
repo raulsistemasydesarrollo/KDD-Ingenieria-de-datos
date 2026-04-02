@@ -28,7 +28,7 @@ Bloques comentados:
 2. Parseo de fechas y utilidades de ficheros.
 3. Motor de rutas (`edge_weight`, `dijkstra`).
 4. Estrategia de fuentes (Cassandra primario + fallback NiFi).
-5. Enriquecimiento de vehiculos con `planned_origin/planned_destination`.
+5. Enriquecimiento de vehiculos con `planned_origin/planned_destination` y ruta completa (`planned_route_nodes`, `planned_route_label`).
 6. Router API (`/api/overview`, `/api/vehicles/latest`, `/api/network/best-route`, etc.).
 7. Operativa de reentreno IA (`/api/ml/retrain`, `/api/ml/retrain/status`) y cache/recomendacion.
 8. Persistencia de estado de reentreno en Cassandra (`model_retrain_state`).

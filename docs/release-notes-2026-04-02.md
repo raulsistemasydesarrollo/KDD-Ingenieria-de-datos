@@ -58,6 +58,21 @@ Cambios adicionales aplicados en esta iteracion de cierre documental:
   - endpoint `POST /api/ml/retrain`,
   - endpoint `GET /api/ml/retrain/status`,
   - recomendacion con score de deriva e histeresis/cooldown.
+- Rutas de Tiempo Real enriquecidas:
+  - se expone y consume ruta completa por vehiculo (`planned_route_nodes`, `planned_route_label`),
+  - tabla/panel muestran `origen -> intermedios -> destino final` (no solo salto inmediato),
+  - proyeccion de mapa usa ruta restante (desde posicion actual) cuando esta disponible.
+- ETA enriquecida en Tiempo Real:
+  - tabla de vehiculos con `ETA nodos restantes` y `ETA destino final`,
+  - panel de historial/vehiculo con ETA por nodos pendientes + ETA final.
+  - ajuste visual responsive en tabla para mejorar legibilidad de columnas ETA.
+  - correccion de proyeccion amarilla para mostrar ruta restante (evita triangulos por nodos ya superados).
+- Cabecera ML refinada:
+  - panel izquierdo con `EN USO` + candidato elegido (`A/B/C`) + comparativa RMSE,
+  - panel derecho con descripcion de los 3 candidatos en columna unica,
+  - destaque visual del candidato activo tanto en texto como en pills.
+- Maquetacion dashboard ajustada para evitar scroll horizontal global:
+  - tablas con wrapping controlado y anchos adaptativos en ambos paneles.
 
 ### Entregables PDF
 
@@ -152,6 +167,9 @@ Cambios relevantes incorporados:
 - Ajustes de trazas para reducir "teletransportaciones" percibidas.
 - Mejora de marcadores de vehiculo y orientacion en sentido de marcha.
 - Inclusiones de ETA en panel de vehiculo.
+- ETA extendida a seguimiento de ruta completa:
+  - ETA por nodos restantes,
+  - ETA destino final en tabla y panel.
 - Correccion de ETA incoherente por caché/suavizado:
   - resincronizacion inmediata cuando cambia el destino estimado,
   - resincronizacion inmediata ante divergencia grande entre ETA cacheado y ETA fisico (`distancia/velocidad + delay`).
@@ -182,7 +200,8 @@ Cambios relevantes incorporados:
 - Nuevo bloque de operacion ML:
   - `POST /api/ml/retrain`,
   - `GET /api/ml/retrain/status`,
-  - panel de recomendacion de reentreno por score de deriva.
+  - panel de recomendacion de reentreno por score de deriva,
+  - paneles de modelos IA (candidatos + ganador en uso).
 
 ## Datos de red y simulacion
 

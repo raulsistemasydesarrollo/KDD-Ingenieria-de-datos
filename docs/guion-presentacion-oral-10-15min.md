@@ -121,6 +121,7 @@ Abre:
 5. **Reentreno IA**
    - Enseña boton `Reentrenar IA`.
    - Explica status + recomendacion por score de deriva.
+   - Señala panel izquierdo (`EN USO` + candidato elegido `A/B/C` y RMSE) y panel derecho (descripcion de candidatos).
    - Comenta endpoints: `POST /api/ml/retrain`, `GET /api/ml/retrain/status`.
    - Frase sugerida:
      > "Este boton no reentrena a ciegas: primero tenemos una recomendacion con score de deriva y reglas de cooldown."

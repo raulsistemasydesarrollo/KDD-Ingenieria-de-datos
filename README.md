@@ -338,7 +338,12 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
   - perfiles adicionales `eco`, `low_risk`, `reliable`,
   - patron horario y pesos `tiempo/riesgo/eco`,
   - panel `Evitar nodos`,
-  - boton `Reentrenar IA` + recomendacion de deriva.
+  - boton `Reentrenar IA` + recomendacion de deriva,
+  - bloque de modelos IA en cabecera con dos paneles:
+    - panel izquierdo: `EN USO` + candidato elegido (A/B/C) y comparativa RMSE,
+    - panel derecho: descripcion de candidatos en columna unica,
+  - rutas de Tiempo Real muestran ruta completa (`origen -> intermedios -> final`) cuando el generador publica `planned_route_nodes`,
+  - tabla de vehiculos y panel de historial muestran `ETA nodos restantes` y `ETA destino final`.
 - ML de riesgo de retraso reforzado con validacion comparativa en cada batch:
   - candidatos `baseline_rf`, `tuned_baseline_rf`, `enhanced_rf`,
   - `enhanced_rf` incorpora features de clima y congestion alineadas por ventana temporal de 15 minutos y almacen,

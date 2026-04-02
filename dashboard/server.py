@@ -25,6 +25,7 @@ import heapq
 import json
 import math
 import os
+import re
 import subprocess
 import threading
 import time
@@ -67,6 +68,7 @@ _INSIGHTS_LAST_PERSIST = {}
 ROUTING_TZ = os.getenv("ROUTING_TZ", "Europe/Madrid")
 RETRAIN_COMMAND = os.getenv("RETRAIN_COMMAND", "docker exec spark-client /opt/spark-app/run-batch.sh")
 RETRAIN_TIMEOUT_SECONDS = int(os.getenv("RETRAIN_TIMEOUT_SECONDS", "3600"))
+RETRAIN_MODEL_PATH = os.getenv("RETRAIN_MODEL_PATH", "hdfs://hadoop:9000/models/delay_risk_rf")
 RETRAIN_RECOMMEND_THRESHOLD = int(os.getenv("RETRAIN_RECOMMEND_THRESHOLD", "55"))
 RETRAIN_RECOMMEND_ON_THRESHOLD = int(os.getenv("RETRAIN_RECOMMEND_ON_THRESHOLD", "70"))
 RETRAIN_RECOMMEND_OFF_THRESHOLD = int(os.getenv("RETRAIN_RECOMMEND_OFF_THRESHOLD", "55"))
@@ -84,8 +86,15 @@ _RETRAIN_STATE = {
     "trigger": None,
     "message": "Sin ejecuciones de reentrenamiento en esta sesion.",
     "output_tail": [],
+    "model_selection": None,
 }
 _RETRAIN_ADVICE_CACHE = {"computed_at": None, "payload": None}
+
+MODEL_CANDIDATES = [
+    {"name": "baseline_rf", "description": "Base: variables operativas esenciales (velocidad/tipo/almacen)."},
+    {"name": "tuned_baseline_rf", "description": "Baseline con hiperparametros ajustados para mejorar generalizacion."},
+    {"name": "enhanced_rf", "description": "Enriquecido con clima y congestion alineados temporalmente (15 min)."},
+]
 
 
 def invalidate_retrain_advice_cache():
@@ -113,6 +122,61 @@ def now_utc():
 
 def _clamp(value: float, low: float, high: float):
     return max(low, min(high, value))
+
+
+def parse_retrain_model_selection(output_lines):
+    if not output_lines:
+        return None
+    pattern = re.compile(
+        r"baseline_rmse=([0-9]+(?:\.[0-9]+)?)\s*\|\s*"
+        r"tuned_baseline_rmse=([0-9]+(?:\.[0-9]+)?)\s*\|\s*"
+        r"enhanced_rmse=([0-9]+(?:\.[0-9]+)?)\s*\|\s*"
+        r"selected=([a-zA-Z0-9_]+)\s*\|\s*"
+        r"selected_rmse=([0-9]+(?:\.[0-9]+)?)"
+    )
+    for line in reversed(output_lines):
+        match = pattern.search(str(line))
+        if not match:
+            continue
+        baseline_rmse, tuned_rmse, enhanced_rmse, selected_name, selected_rmse = match.groups()
+        rmses = {
+            "baseline_rf": float(baseline_rmse),
+            "tuned_baseline_rf": float(tuned_rmse),
+            "enhanced_rf": float(enhanced_rmse),
+        }
+        return {
+            "criterion": "Se elige automaticamente el menor RMSE en test.",
+            "selected_name": str(selected_name),
+            "selected_rmse": float(selected_rmse),
+            "rmses": rmses,
+            "reason": f"{selected_name} obtuvo el RMSE mas bajo ({float(selected_rmse):.4f}).",
+        }
+    return None
+
+
+def build_retrain_model_info(runtime_state, persisted_state=None):
+    selected = runtime_state.get("model_selection") if isinstance(runtime_state, dict) else None
+    if not selected and isinstance(persisted_state, dict):
+        persisted_selected = persisted_state.get("last_selected_model")
+        if persisted_selected:
+            selected = {
+                "criterion": "Se elige automaticamente el menor RMSE en test.",
+                "selected_name": persisted_selected,
+                "selected_rmse": persisted_state.get("last_selected_rmse"),
+                "rmses": {
+                    "baseline_rf": persisted_state.get("last_baseline_rmse"),
+                    "tuned_baseline_rf": persisted_state.get("last_tuned_baseline_rmse"),
+                    "enhanced_rf": persisted_state.get("last_enhanced_rmse"),
+                },
+                "reason": f"{persisted_selected} fue el ultimo candidato ganador registrado.",
+            }
+    return {
+        "artifact_name": RETRAIN_MODEL_NAME,
+        "artifact_path": RETRAIN_MODEL_PATH,
+        "criterion": "Menor RMSE en test entre baseline_rf, tuned_baseline_rf y enhanced_rf.",
+        "candidates": MODEL_CANDIDATES,
+        "selected": selected,
+    }
 
 
 def _parse_float(value, default: float):
@@ -224,6 +288,7 @@ def _run_retrain_worker(trigger: str):
         _RETRAIN_STATE["trigger"] = trigger
         _RETRAIN_STATE["message"] = "Reentrenamiento en ejecucion..."
         _RETRAIN_STATE["output_tail"] = []
+        _RETRAIN_STATE["model_selection"] = None
 
     output_tail = []
     try:
@@ -256,12 +321,14 @@ def _run_retrain_worker(trigger: str):
 
     finished = now_utc()
     with _RETRAIN_LOCK:
+        model_selection = parse_retrain_model_selection(output_tail)
         _RETRAIN_STATE["status"] = status
         _RETRAIN_STATE["finished_at"] = to_iso(finished)
         _RETRAIN_STATE["duration_seconds"] = round((finished - started).total_seconds(), 2)
         _RETRAIN_STATE["exit_code"] = exit_code
         _RETRAIN_STATE["message"] = msg
         _RETRAIN_STATE["output_tail"] = output_tail[-40:]
+        _RETRAIN_STATE["model_selection"] = model_selection
     persist_retrain_runtime_state(
         status=status,
         trigger=trigger,
@@ -270,6 +337,7 @@ def _run_retrain_worker(trigger: str):
         duration_seconds=round((finished - started).total_seconds(), 2),
         exit_code=exit_code,
         message=msg,
+        model_selection=model_selection,
     )
 
 
@@ -285,6 +353,7 @@ def start_retrain_if_idle(trigger: str = "manual"):
         _RETRAIN_STATE["trigger"] = trigger
         _RETRAIN_STATE["message"] = "Reentrenamiento en cola..."
         _RETRAIN_STATE["output_tail"] = []
+        _RETRAIN_STATE["model_selection"] = None
         invalidate_retrain_advice_cache()
         worker = threading.Thread(target=_run_retrain_worker, args=(trigger,), daemon=True)
         worker.start()
@@ -299,9 +368,48 @@ def _retrain_default_persisted_state():
         "last_status": None,
         "last_recommendation": None,
         "last_score": None,
+        "last_selected_model": None,
+        "last_selected_rmse": None,
+        "last_baseline_rmse": None,
+        "last_tuned_baseline_rmse": None,
+        "last_enhanced_rmse": None,
         "updated_at": None,
         "source": "none",
     }
+
+
+def ensure_retrain_state_table(session):
+    session.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
+            model_name text PRIMARY KEY,
+            last_success_at timestamp,
+            last_run_at timestamp,
+            last_status text,
+            last_recommendation boolean,
+            last_score int,
+            last_selected_model text,
+            last_selected_rmse double,
+            last_baseline_rmse double,
+            last_tuned_baseline_rmse double,
+            last_enhanced_rmse double,
+            updated_at timestamp
+        )
+        """
+    )
+    # Compatibilidad con tablas antiguas ya creadas sin columnas de seleccion.
+    alter_stmts = [
+        f"ALTER TABLE {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} ADD last_selected_model text",
+        f"ALTER TABLE {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} ADD last_selected_rmse double",
+        f"ALTER TABLE {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} ADD last_baseline_rmse double",
+        f"ALTER TABLE {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} ADD last_tuned_baseline_rmse double",
+        f"ALTER TABLE {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} ADD last_enhanced_rmse double",
+    ]
+    for stmt in alter_stmts:
+        try:
+            session.execute(stmt)
+        except Exception:
+            pass
 
 
 def load_persisted_retrain_state():
@@ -315,22 +423,13 @@ def load_persisted_retrain_state():
     try:
         cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
         session = cluster.connect()
-        session.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
-                model_name text PRIMARY KEY,
-                last_success_at timestamp,
-                last_run_at timestamp,
-                last_status text,
-                last_recommendation boolean,
-                last_score int,
-                updated_at timestamp
-            )
-            """
-        )
+        ensure_retrain_state_table(session)
         row = session.execute(
             f"SELECT model_name, last_success_at, last_run_at, last_status, "
-            f"last_recommendation, last_score, updated_at "
+            f"last_recommendation, last_score, "
+            f"last_selected_model, last_selected_rmse, "
+            f"last_baseline_rmse, last_tuned_baseline_rmse, last_enhanced_rmse, "
+            f"updated_at "
             f"FROM {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} WHERE model_name=%s",
             [RETRAIN_MODEL_NAME],
         ).one()
@@ -345,6 +444,19 @@ def load_persisted_retrain_state():
             "last_status": getattr(row, "last_status", None),
             "last_recommendation": getattr(row, "last_recommendation", None),
             "last_score": int(getattr(row, "last_score", 0) or 0) if getattr(row, "last_score", None) is not None else None,
+            "last_selected_model": getattr(row, "last_selected_model", None),
+            "last_selected_rmse": float(getattr(row, "last_selected_rmse", 0.0) or 0.0)
+            if getattr(row, "last_selected_rmse", None) is not None
+            else None,
+            "last_baseline_rmse": float(getattr(row, "last_baseline_rmse", 0.0) or 0.0)
+            if getattr(row, "last_baseline_rmse", None) is not None
+            else None,
+            "last_tuned_baseline_rmse": float(getattr(row, "last_tuned_baseline_rmse", 0.0) or 0.0)
+            if getattr(row, "last_tuned_baseline_rmse", None) is not None
+            else None,
+            "last_enhanced_rmse": float(getattr(row, "last_enhanced_rmse", 0.0) or 0.0)
+            if getattr(row, "last_enhanced_rmse", None) is not None
+            else None,
             "updated_at": _to_event_time(getattr(row, "updated_at", None)),
             "source": "cassandra",
         }
@@ -363,7 +475,7 @@ def load_persisted_retrain_state():
             pass
 
 
-def persist_retrain_runtime_state(status, trigger, started_at, finished_at, duration_seconds, exit_code, message):
+def persist_retrain_runtime_state(status, trigger, started_at, finished_at, duration_seconds, exit_code, message, model_selection=None):
     if Cluster is None:
         return
     cluster = None
@@ -371,32 +483,36 @@ def persist_retrain_runtime_state(status, trigger, started_at, finished_at, dura
     try:
         cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
         session = cluster.connect()
-        session.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
-                model_name text PRIMARY KEY,
-                last_success_at timestamp,
-                last_run_at timestamp,
-                last_status text,
-                last_recommendation boolean,
-                last_score int,
-                updated_at timestamp
-            )
-            """
-        )
+        ensure_retrain_state_table(session)
         previous = session.execute(
-            f"SELECT last_success_at, last_recommendation, last_score FROM {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
+            f"SELECT last_success_at, last_recommendation, last_score, "
+            f"last_selected_model, last_selected_rmse, "
+            f"last_baseline_rmse, last_tuned_baseline_rmse, last_enhanced_rmse "
+            f"FROM {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
             f"WHERE model_name=%s",
             [RETRAIN_MODEL_NAME],
         ).one()
         prev_success = getattr(previous, "last_success_at", None) if previous else None
         prev_recommendation = getattr(previous, "last_recommendation", None) if previous else None
         prev_score = getattr(previous, "last_score", None) if previous else None
+        prev_selected_model = getattr(previous, "last_selected_model", None) if previous else None
+        prev_selected_rmse = getattr(previous, "last_selected_rmse", None) if previous else None
+        prev_baseline_rmse = getattr(previous, "last_baseline_rmse", None) if previous else None
+        prev_tuned_rmse = getattr(previous, "last_tuned_baseline_rmse", None) if previous else None
+        prev_enhanced_rmse = getattr(previous, "last_enhanced_rmse", None) if previous else None
+        selected_model = model_selection.get("selected_name") if isinstance(model_selection, dict) else None
+        rmses = model_selection.get("rmses") if isinstance(model_selection, dict) else {}
+        baseline_rmse = rmses.get("baseline_rf") if isinstance(rmses, dict) else None
+        tuned_rmse = rmses.get("tuned_baseline_rf") if isinstance(rmses, dict) else None
+        enhanced_rmse = rmses.get("enhanced_rf") if isinstance(rmses, dict) else None
+        selected_rmse = model_selection.get("selected_rmse") if isinstance(model_selection, dict) else None
         new_success = finished_at if status == "done" else prev_success
         session.execute(
             f"INSERT INTO {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
-            f"(model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, updated_at) "
-            f"VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            f"(model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, "
+            f"last_selected_model, last_selected_rmse, last_baseline_rmse, last_tuned_baseline_rmse, last_enhanced_rmse, "
+            f"updated_at) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             [
                 RETRAIN_MODEL_NAME,
                 new_success,
@@ -404,6 +520,11 @@ def persist_retrain_runtime_state(status, trigger, started_at, finished_at, dura
                 str(status),
                 prev_recommendation,
                 int(prev_score) if prev_score is not None else None,
+                selected_model or prev_selected_model,
+                float(selected_rmse) if selected_rmse is not None else prev_selected_rmse,
+                float(baseline_rmse) if baseline_rmse is not None else prev_baseline_rmse,
+                float(tuned_rmse) if tuned_rmse is not None else prev_tuned_rmse,
+                float(enhanced_rmse) if enhanced_rmse is not None else prev_enhanced_rmse,
                 now_utc(),
             ],
         )
@@ -432,23 +553,13 @@ def persist_retrain_advice_state(recommended: bool, score: int):
     try:
         cluster = Cluster(contact_points=[CASSANDRA_HOST], port=CASSANDRA_PORT)
         session = cluster.connect()
-        session.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} (
-                model_name text PRIMARY KEY,
-                last_success_at timestamp,
-                last_run_at timestamp,
-                last_status text,
-                last_recommendation boolean,
-                last_score int,
-                updated_at timestamp
-            )
-            """
-        )
+        ensure_retrain_state_table(session)
         session.execute(
             f"INSERT INTO {CASSANDRA_KEYSPACE}.{RETRAIN_STATE_TABLE} "
-            f"(model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, updated_at) "
-            f"VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            f"(model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, "
+            f"last_selected_model, last_selected_rmse, last_baseline_rmse, last_tuned_baseline_rmse, last_enhanced_rmse, "
+            f"updated_at) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             [
                 RETRAIN_MODEL_NAME,
                 last_success,
@@ -456,6 +567,11 @@ def persist_retrain_advice_state(recommended: bool, score: int):
                 persisted.get("last_status"),
                 bool(recommended),
                 int(score),
+                persisted.get("last_selected_model"),
+                persisted.get("last_selected_rmse"),
+                persisted.get("last_baseline_rmse"),
+                persisted.get("last_tuned_baseline_rmse"),
+                persisted.get("last_enhanced_rmse"),
                 now_utc(),
             ],
         )
@@ -1603,11 +1719,35 @@ def load_vehicle_path_plans(warehouse_aliases):
             continue
         origin = normalize_warehouse_id(item.get("origin"), warehouse_aliases)
         destination = normalize_warehouse_id(item.get("destination"), warehouse_aliases)
+        route_origin = normalize_warehouse_id(item.get("planned_route_origin"), warehouse_aliases)
+        route_destination = normalize_warehouse_id(item.get("planned_route_destination"), warehouse_aliases)
+        raw_route_nodes = item.get("planned_route_nodes")
+        route_nodes = []
+        if isinstance(raw_route_nodes, list):
+            for node in raw_route_nodes:
+                norm = normalize_warehouse_id(node, warehouse_aliases)
+                if norm:
+                    route_nodes.append(str(norm))
+        route_label = item.get("planned_route_label")
         if not vehicle_id or not origin or not destination:
             continue
+        if not route_nodes and route_origin and route_destination:
+            route_nodes = [str(route_origin), str(route_destination)]
+        if not route_origin and route_nodes:
+            route_origin = route_nodes[0]
+        if not route_destination and route_nodes:
+            route_destination = route_nodes[-1]
+        if not isinstance(route_label, str) or not route_label.strip():
+            route_label = " -> ".join(route_nodes) if route_nodes else f"{origin} -> {destination}"
         plans[str(vehicle_id)] = {
+            # Compatibilidad: tramo actual (nodo inmediato).
             "planned_origin": str(origin),
             "planned_destination": str(destination),
+            # Ruta completa orientada (origen, intermedios, final).
+            "planned_route_origin": str(route_origin or origin),
+            "planned_route_destination": str(route_destination or destination),
+            "planned_route_nodes": route_nodes,
+            "planned_route_label": str(route_label),
         }
     return plans
 
@@ -1623,6 +1763,10 @@ def attach_vehicle_plans(rows, plans):
             continue
         row["planned_origin"] = plan.get("planned_origin")
         row["planned_destination"] = plan.get("planned_destination")
+        row["planned_route_origin"] = plan.get("planned_route_origin")
+        row["planned_route_destination"] = plan.get("planned_route_destination")
+        row["planned_route_nodes"] = plan.get("planned_route_nodes")
+        row["planned_route_label"] = plan.get("planned_route_label")
     return rows
 
 
@@ -2317,12 +2461,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             trigger = str(payload.get("trigger") or "manual_dashboard")
             started, state = start_retrain_if_idle(trigger=trigger)
             advice = get_retrain_advice_cached()
+            persisted_state = load_persisted_retrain_state()
+            model_info = build_retrain_model_info(state, persisted_state=persisted_state)
             status_code = HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT
             self._json(
                 {
                     "started": started,
                     "state": state,
                     "advice": advice,
+                    "model_info": model_info,
                     "command": RETRAIN_COMMAND,
                 },
                 status=status_code,
@@ -2338,7 +2485,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             with _RETRAIN_LOCK:
                 state = dict(_RETRAIN_STATE)
             advice = get_retrain_advice_cached()
-            self._json({"state": state, "advice": advice, "command": RETRAIN_COMMAND})
+            persisted_state = load_persisted_retrain_state()
+            model_info = build_retrain_model_info(state, persisted_state=persisted_state)
+            self._json({"state": state, "advice": advice, "model_info": model_info, "command": RETRAIN_COMMAND})
             return
 
         events = load_gps_events()

@@ -17,7 +17,7 @@
 5. Filtros de Analisis Logistico (solo vista derecha)
 6. Reentreno IA (estado de modelo)
 7. Reglas de interpretacion de ruta por vehiculo
-8. ETA en panel de vehiculo
+8. ETA en tabla e historial de vehiculo
 9. Datos y nodos actuales
 10. Reinicio limpio de demo
 11. Nota de uso
@@ -87,7 +87,7 @@ Parametros clave en `GET /api/network/best-route`:
 
 - Marcadores de vehiculo: posicion actual por `vehicle_id`.
 - Lineas naranjas: traza reciente del movimiento del vehiculo (historial corto), **no** son carreteras fijas.
-- Linea discontinua amarilla: proyeccion del tramo del vehiculo seleccionado hacia su siguiente nodo estimado.
+- Linea discontinua amarilla: proyeccion de la ruta restante del vehiculo seleccionado (desde posicion actual hasta nodos pendientes).
 - Marcadores de almacen:
   - naranja: criticidad `high`
   - azul: criticidad `medium`
@@ -218,6 +218,9 @@ El dashboard incorpora operativa de reentreno en cabecera:
 - Boton `Reentrenar IA`.
 - Estado de ejecucion (`idle`, `running`, `done`, `error`) con duracion y timestamp de fin.
 - Panel de recomendacion de reentreno con score de deriva (`0-100`) y motivos explicativos.
+- Bloque de modelos IA en dos paneles:
+  - panel izquierdo: modelo en uso (`EN USO`), candidato elegido (`A/B/C`) y comparativa RMSE,
+  - panel derecho: descripcion funcional de los 3 candidatos en columna unica.
 
 Endpoints asociados:
 
@@ -226,7 +229,8 @@ Endpoints asociados:
   - devuelve `202 Accepted` si arranca o `409 Conflict` si ya hay uno en curso.
 - `GET /api/ml/retrain/status`:
   - devuelve estado runtime del proceso,
-  - devuelve recomendacion cacheada de reentreno y metrica de deriva.
+  - devuelve recomendacion cacheada de reentreno y metrica de deriva,
+  - devuelve `model_info` con candidatos, criterio de seleccion y ultimo ganador persistido.
 
 Reglas operativas de recomendacion:
 
@@ -239,20 +243,27 @@ Comportamiento del job de reentreno (Spark batch):
 - Entrena y compara 3 candidatos (`baseline_rf`, `tuned_baseline_rf`, `enhanced_rf`).
 - `enhanced_rf` incluye features de clima y congestion alineadas por `warehouse_id` + ventana de 15 minutos para mejorar prediccion en condiciones operativas.
 - Selecciona automaticamente el de menor RMSE para persistir el modelo final.
+- El backend persiste el ultimo ganador (`last_selected_model`) y los RMSE de referencia en Cassandra para mostrarlos en cabecera tras reinicios.
 - Esto evita que un experimento de features degrade prediccion en produccion del dashboard.
 
 ## Reglas de interpretacion de ruta por vehiculo
 
 El dashboard prioriza para cada vehiculo:
 
-1. `planned_origin/planned_destination` (estado del generador en `.vehicle_path_state.json`).
-2. Si no existe plan, inferencia por posicion y heading.
+1. tramo actual `planned_origin/planned_destination` (estado del generador en `.vehicle_path_state.json`).
+2. ruta completa orientada `planned_route_nodes` y `planned_route_label` (origen -> intermedios -> final).
+3. Si no existe plan, inferencia por posicion y heading.
 
 Esto evita incoherencias visuales (ejemplo: rutas tipo `X -> X` o proyecciones a nodos no esperados).
 
+Comportamiento visual asociado:
+
+- Tabla de flota y panel de vehiculo muestran la ruta completa cuando existe.
+- En mapa de tiempo real, la proyeccion del vehiculo seleccionado dibuja la ruta restante para evitar retrocesos visuales (fallback a siguiente nodo si no hay plan completo).
+
 ## ETA en panel de vehiculo
 
-La ETA (`Hora estimada llegada`) se calcula en frontend por vehiculo como:
+La ETA se calcula en frontend por vehiculo como:
 
 1. distancia al siguiente nodo estimado,
 2. velocidad actual (`speed_kmh`),
@@ -263,7 +274,17 @@ Para estabilidad visual existe suavizado temporal, pero con resincronizacion for
 - cambio de destino estimado (`destinationId`),
 - divergencia grande entre ETA cacheado y ETA fisico (`distance/speed + delay`).
 
-Con esto se evita que persistan ETAs irreales tras saltos de posicion, cambios de ruta o refrescos incompletos.
+Representacion en UI:
+
+- Tabla de vehiculos:
+  - `ETA nodos restantes`: ETA por nodos pendientes en orden de paso (preview compacto).
+  - `ETA destino final`: ETA al ultimo nodo de la ruta planificada.
+- Historial/vehiculo seleccionado (panel):
+  - `ETA siguiente nodo`.
+  - `ETA nodos restantes` (detalle completo por nodo pendiente).
+  - `ETA destino final`.
+
+Con esto se evita que persistan ETAs irreales tras saltos de posicion, cambios de ruta o refrescos incompletos, y se mejora la visibilidad del avance real hasta el destino final.
 
 ## Datos y nodos actuales
 

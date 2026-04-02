@@ -360,6 +360,15 @@ def current_segment_nodes(path_state: dict) -> tuple[str, str]:
     return path[idx + 1], path[idx]
 
 
+def ordered_route_nodes(path_state: dict) -> list[str]:
+    route_cfg = ROUTE_CATALOG[path_state["route_id"]]
+    path = route_cfg["path"]
+    direction = int(path_state.get("direction", 1))
+    if direction >= 0:
+        return list(path)
+    return list(reversed(path))
+
+
 def seed_state_for_route(route_id: str, preferred_node: str | None = None) -> dict:
     route_cfg = ROUTE_CATALOG[route_id]
     path = route_cfg["path"]
@@ -441,9 +450,7 @@ def load_vehicle_path_state():
             "progress": progress,
             "dwell_remaining": int(dwell_remaining),
         }
-        origin, destination = current_segment_nodes(loaded)
-        loaded["origin"] = origin
-        loaded["destination"] = destination
+        _refresh_leg_compat_fields(loaded)
         state[vehicle_id] = loaded
     return state
 
@@ -460,8 +467,17 @@ VEHICLE_PATH_STATE = {}
 
 def _refresh_leg_compat_fields(path_state: dict) -> None:
     origin, destination = current_segment_nodes(path_state)
+    route_nodes = ordered_route_nodes(path_state)
     path_state["origin"] = origin
     path_state["destination"] = destination
+    path_state["planned_route_nodes"] = route_nodes
+    path_state["planned_route_label"] = " -> ".join(route_nodes)
+    if route_nodes:
+        path_state["planned_route_origin"] = route_nodes[0]
+        path_state["planned_route_destination"] = route_nodes[-1]
+    else:
+        path_state["planned_route_origin"] = origin
+        path_state["planned_route_destination"] = destination
 
 
 def _advance_segment(path_state: dict) -> None:

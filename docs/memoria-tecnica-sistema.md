@@ -515,14 +515,18 @@ Frontend:
 - bloque de reentreno IA en cabecera:
   - boton `Reentrenar IA`,
   - estado runtime,
-  - recomendacion de reentreno con score de deriva y motivos.
+  - recomendacion de reentreno con score de deriva y motivos,
+  - panel de modelos IA en dos bloques:
+    - izquierda: `EN USO` + candidato elegido (`A/B/C`) y comparativa RMSE,
+    - derecha: descripcion funcional de los 3 candidatos.
 - comportamiento de filtros RT:
   - `TODOS->TODOS` vista global,
   - filtros parciales (`TODOS->X` o `X->TODOS`) soportados.
 - reglas de consistencia:
   - no ruta concreta con origen=destino en bloque logistico,
   - limpieza automatica de seleccion de vehiculo si deja de cumplir filtro RT,
-  - priorizacion de `planned_origin/planned_destination` para evitar rutas `X->X` espurias y proyecciones incoherentes.
+  - priorizacion de `planned_origin/planned_destination` + `planned_route_nodes` para evitar rutas `X->X` espurias y proyecciones incoherentes.
+  - uso de `planned_route_nodes` para proyectar ruta restante (no nodos ya superados).
   - selectores de origen/destino ordenados alfabeticamente en ambas vistas,
   - etiquetas de nodo RT en formato 3 letras y semitransparentes para no ocultar vehiculos.
 

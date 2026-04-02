@@ -51,6 +51,7 @@ const state = {
   temporalMode: "auto",
   retrainState: null,
   retrainAdvice: null,
+  retrainModelInfo: null,
   routeCalcDebounceTimer: null,
   lastOverview: null,
   lastOverviewLiveEdgeSummary: null
@@ -88,7 +89,8 @@ const TABLE_HEADER_TOOLTIPS = {
     Ruta: "Corredor reportado del vehiculo (origen -> destino).",
     "Delay (min)": "Retraso actual estimado del vehiculo en minutos.",
     Velocidad: "Velocidad instantanea aproximada en km/h.",
-    ETA: "Hora estimada de llegada al siguiente nodo de su ruta.",
+    "ETA nodos restantes": "ETA prevista para los nodos pendientes de la ruta, en orden de paso.",
+    "ETA destino final": "Hora estimada de llegada al ultimo nodo de la ruta planificada.",
     "Ultimo evento": "Marca temporal del ultimo evento recibido para ese vehiculo."
   },
   "all-routes-table": {
@@ -432,17 +434,18 @@ function renderVehicleTable(items) {
   tbody.innerHTML = items
     .map(
       (v) => {
-        const eta = computeVehicleEta(v);
+        const routeEtas = computeVehicleRouteEtas(v);
         const hasLiveEvent = !!v.event_time;
         return `
       <tr>
         <td>${v.vehicle_id}</td>
         <td>${String(v.vehicle_status || "active").toUpperCase()}</td>
         <td>${v.warehouse_id || "-"}</td>
-        <td>${displayRouteForVehicle(v)}</td>
+        <td class="route-col">${displayRouteForVehicle(v)}</td>
         <td class=\"${hasLiveEvent ? severityClass(v.delay_minutes) : ""}\">${hasLiveEvent ? v.delay_minutes : "-"}</td>
         <td>${hasLiveEvent ? fmt.n(v.speed_kmh, 1) : "-"}</td>
-        <td>${hasLiveEvent ? eta.etaLabel : "-"}</td>
+        <td class="eta-remaining-col">${hasLiveEvent ? routeEtas.remainingNodesCompact : "-"}</td>
+        <td class="eta-final-col">${hasLiveEvent ? routeEtas.finalEtaLabel : "-"}</td>
         <td>${fmt.dt(v.event_time)}</td>
       </tr>
     `;
@@ -609,6 +612,106 @@ function computeVehicleEta(vehicle) {
   return { etaLabel, minutes: stableMinutes, destination: nextNode };
 }
 
+function formatEtaFromMinutes(minutes, nowMs = Date.now()) {
+  if (!Number.isFinite(minutes)) return "-";
+  const etaDate = new Date(nowMs + Number(minutes) * 60000);
+  return `${etaDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: false })} (${fmt.hm(minutes)})`;
+}
+
+function remainingRouteNodesForVehicle(vehicle, nextNode = null) {
+  const fullRoute = fullPlannedRouteForVehicle(vehicle);
+  if (!fullRoute?.nodes?.length) return [];
+  const nodes = fullRoute.nodes;
+
+  if (nextNode?.id) {
+    const nextIdx = nodes.findIndex((n) => n.id === nextNode.id);
+    if (nextIdx >= 0) return nodes.slice(nextIdx);
+  }
+
+  const point = { lat: Number(vehicle?.latitude), lng: Number(vehicle?.longitude) };
+  let nearestIdx = -1;
+  let nearestDist = Infinity;
+  nodes.forEach((node, idx) => {
+    const d = distanceKm(point, { lat: Number(node.latitude), lng: Number(node.longitude) });
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestIdx = idx;
+    }
+  });
+  if (nearestIdx < 0) return [];
+  const startIdx = nearestDist <= 1.2 && nearestIdx < nodes.length - 1 ? nearestIdx + 1 : nearestIdx;
+  return nodes.slice(startIdx);
+}
+
+function computeVehicleRouteEtas(vehicle) {
+  const fallback = {
+    nextEtaLabel: "-",
+    finalEtaLabel: "-",
+    remainingNodesCompact: "-",
+    remainingNodesVerbose: "-",
+    remainingNodes: []
+  };
+  if (!vehicle) return fallback;
+
+  const nowMs = Date.now();
+  const nextEta = computeVehicleEta(vehicle);
+  const remainingNodes = remainingRouteNodesForVehicle(vehicle, nextEta.destination);
+  if (!remainingNodes.length) {
+    return {
+      ...fallback,
+      nextEtaLabel: nextEta.etaLabel || "-",
+      finalEtaLabel: nextEta.etaLabel || "-"
+    };
+  }
+
+  const speed = Number(vehicle.speed_kmh || 0);
+  if (speed <= 0) return fallback;
+
+  const etaPoints = [];
+  const nextMinutes = Number(nextEta.minutes);
+  let runningMinutes = Number.isFinite(nextMinutes) ? nextMinutes : null;
+  let baseMinutes = Number.isFinite(nextMinutes) ? nextMinutes : null;
+  let lastPoint = Number.isFinite(nextMinutes) ? remainingNodes[0] : { lat: Number(vehicle.latitude), lng: Number(vehicle.longitude) };
+  let cumulativeExtraMinutes = 0;
+
+  remainingNodes.forEach((node, idx) => {
+    if (idx === 0 && Number.isFinite(nextMinutes)) {
+      runningMinutes = nextMinutes;
+    } else if (runningMinutes === null) {
+      const segmentKm = distanceKm(lastPoint, { lat: Number(node.latitude), lng: Number(node.longitude) });
+      const travelMinutes = (segmentKm / speed) * 60;
+      const delayBuffer = idx === 0 ? Number(vehicle.delay_minutes || 0) * 0.35 : 0;
+      runningMinutes = travelMinutes + delayBuffer;
+      if (idx === 0) baseMinutes = runningMinutes;
+    } else {
+      const segmentKm = distanceKm(lastPoint, { lat: Number(node.latitude), lng: Number(node.longitude) });
+      cumulativeExtraMinutes += (segmentKm / speed) * 60;
+      runningMinutes = (baseMinutes || 0) + cumulativeExtraMinutes;
+    }
+
+    etaPoints.push({
+      id: node.id,
+      latitude: Number(node.latitude),
+      longitude: Number(node.longitude),
+      minutes: runningMinutes,
+      etaLabel: formatEtaFromMinutes(runningMinutes, nowMs)
+    });
+    lastPoint = { lat: Number(node.latitude), lng: Number(node.longitude) };
+  });
+
+  if (!etaPoints.length) return fallback;
+  const compactPreview = etaPoints.slice(0, 2).map((p) => `${p.id}:${p.etaLabel.split(" ")[0]}`);
+  if (etaPoints.length > 2) compactPreview.push(`+${etaPoints.length - 2}`);
+
+  return {
+    nextEtaLabel: etaPoints[0].etaLabel,
+    finalEtaLabel: etaPoints[etaPoints.length - 1].etaLabel,
+    remainingNodesCompact: compactPreview.join(" | "),
+    remainingNodesVerbose: etaPoints.map((p) => `${p.id}: ${p.etaLabel}`).join("<br/>"),
+    remainingNodes: etaPoints
+  };
+}
+
 function headingTowardRouteDestination(vehicle) {
   if (!vehicle) return null;
   const current = { lat: Number(vehicle.latitude), lng: Number(vehicle.longitude) };
@@ -731,6 +834,18 @@ function plannedRouteForVehicle(vehicle) {
   const toNode = graphNodeById(toId);
   if (!fromNode || !toNode) return null;
   return { from: fromNode, to: toNode, label: `${fromNode.id} -> ${toNode.id}` };
+}
+
+function fullPlannedRouteForVehicle(vehicle) {
+  if (!vehicle) return null;
+  const rawNodes = Array.isArray(vehicle.planned_route_nodes) ? vehicle.planned_route_nodes : [];
+  const nodeIds = rawNodes.map((n) => String(n || "").trim()).filter(Boolean);
+  if (nodeIds.length < 2) return null;
+  const nodes = nodeIds.map((id) => graphNodeById(id)).filter(Boolean);
+  if (nodes.length < 2) return null;
+  const fallbackLabel = nodes.map((n) => n.id).join(" -> ");
+  const label = String(vehicle.planned_route_label || fallbackLabel || "").trim() || fallbackLabel;
+  return { nodes, label };
 }
 
 function inferVehicleRoute(vehicle) {
@@ -879,6 +994,8 @@ function computeHeadingFromMovement(prev, next) {
 }
 
 function displayRouteForVehicle(vehicle) {
+  const fullPlanned = fullPlannedRouteForVehicle(vehicle);
+  if (fullPlanned?.label) return fullPlanned.label;
   const inferred = inferVehicleRoute(vehicle);
   const routeNext = estimateNextNodeOnActiveRoute(vehicle);
   if (inferred.from?.id && routeNext?.id) {
@@ -1154,9 +1271,12 @@ function scheduleRouteRecalc(delayMs = 220) {
 function renderRetrainStatePanel() {
   const statusEl = document.getElementById("retrain-status");
   const adviceEl = document.getElementById("retrain-advice");
+  const modelActiveEl = document.getElementById("retrain-model-active");
+  const modelCandidatesEl = document.getElementById("retrain-model-candidates");
   const btn = document.getElementById("retrain-btn");
   const retrainState = state.retrainState || {};
   const advice = state.retrainAdvice || {};
+  const modelInfo = state.retrainModelInfo || {};
   const status = String(retrainState.status || "idle").toLowerCase();
   const statusLabelMap = {
     idle: "en espera",
@@ -1196,6 +1316,67 @@ function renderRetrainStatePanel() {
     adviceEl.classList.remove("bad", "recommended", "stable");
     adviceEl.classList.add(recommended ? "recommended" : "stable");
   }
+  if (modelActiveEl || modelCandidatesEl) {
+    const selected = modelInfo.selected || null;
+    const candidates = Array.isArray(modelInfo.candidates) ? modelInfo.candidates : [];
+    const defaultCandidates = [
+      { name: "baseline_rf", description: "Base operativa: velocidad, tipo y almacen." },
+      { name: "tuned_baseline_rf", description: "Baseline ajustado de hiperparametros." },
+      { name: "enhanced_rf", description: "Anade clima y congestion (ventana 15 min)." },
+    ];
+    const candidateMeta = candidates.length ? candidates : defaultCandidates;
+    const candidateNames = candidateMeta.map((c) => c.name);
+    const letters = ["A", "B", "C", "D", "E"];
+    const selectedName = selected?.selected_name ? String(selected.selected_name) : "";
+    const selectedIdx = candidateNames.findIndex((n) => n === selectedName);
+    const selectedLabel = selectedIdx >= 0 ? `${letters[selectedIdx] || selectedIdx + 1}:${selectedName}` : selectedName;
+    const candidatesHtml = candidateNames
+      .map((name, idx) => {
+        const desc = candidateMeta[idx]?.description || "";
+        const label = `${letters[idx] || idx + 1}:${name}`;
+        return (
+        name === selectedName
+          ? `<span class="model-pill active" title="${desc}">${label} (en uso)</span>`
+          : `<span class="model-pill" title="${desc}">${label}</span>`
+        );
+      })
+      .join(" ");
+    const criteriaHtml = candidateMeta
+      .map((c, idx) => `<span class="model-criterion-item"><strong>${letters[idx] || idx + 1}. ${c.name}</strong>: ${c.description || "-"}</span>`)
+      .join(" ");
+    if (selected?.selected_name) {
+      const rmseBits = selected.rmses
+        ? `baseline=${fmt.n(selected.rmses.baseline_rf, 4)}, tuned=${fmt.n(selected.rmses.tuned_baseline_rf, 4)}, enhanced=${fmt.n(selected.rmses.enhanced_rf, 4)}`
+        : "";
+      if (modelActiveEl) {
+        modelActiveEl.innerHTML =
+        `<span class="model-used active-used">EN USO: ${selected.selected_name}` +
+        `${Number.isFinite(selected.selected_rmse) ? ` (RMSE ${fmt.n(selected.selected_rmse, 4)})` : ""}</span>. ` +
+        `<div class="model-chosen-line">CANDIDATO ELEGIDO: ${selectedLabel}</div>` +
+        `<div class="model-candidates">Candidatos: ${candidatesHtml}</div> ` +
+        `${selected.reason || modelInfo.criterion || "Criterio: menor RMSE en test."}` +
+        `${rmseBits ? ` Comparativa RMSE: ${rmseBits}.` : ""}`;
+      }
+      if (modelCandidatesEl) {
+        modelCandidatesEl.innerHTML =
+          `<span class="model-candidates">Descripcion de candidatos:</span>` +
+          `<div class="model-criteria">${criteriaHtml}</div>`;
+      }
+    } else {
+      if (modelActiveEl) {
+        modelActiveEl.innerHTML =
+        `<span class="model-used active-used">EN USO: ${modelInfo.artifact_name || "delay_risk_rf"}</span>. ` +
+        `<div class="model-candidates">Candidatos: ${candidatesHtml}</div> ` +
+        `Criterio de seleccion: ${modelInfo.criterion || "menor RMSE en test"}. ` +
+        `Ultimo ganador no disponible; se mostrara tras el proximo reentreno.`;
+      }
+      if (modelCandidatesEl) {
+        modelCandidatesEl.innerHTML =
+          `<span class="model-candidates">Descripcion de candidatos:</span>` +
+          `<div class="model-criteria">${criteriaHtml}</div>`;
+      }
+    }
+  }
 }
 
 async function refreshRetrainStatus() {
@@ -1203,6 +1384,7 @@ async function refreshRetrainStatus() {
     const payload = await fetchJson("/api/ml/retrain/status");
     state.retrainState = payload.state || null;
     state.retrainAdvice = payload.advice || null;
+    state.retrainModelInfo = payload.model_info || null;
     if (state.lastOverview) {
       renderOverview(state.lastOverview, state.lastOverviewLiveEdgeSummary);
     }
@@ -1222,6 +1404,7 @@ async function triggerRetrain() {
     const payload = await res.json();
     state.retrainState = payload.state || state.retrainState;
     state.retrainAdvice = payload.advice || state.retrainAdvice;
+    state.retrainModelInfo = payload.model_info || state.retrainModelInfo;
     renderRetrainStatePanel();
   } catch (err) {
     const statusEl = document.getElementById("retrain-status");
@@ -1744,7 +1927,7 @@ function renderSelectedVehiclePanel() {
   const panel = document.getElementById("selected-vehicle-panel");
   if (!panel) return;
   if (!state.selectedVehicle) {
-    panel.innerHTML = "Selecciona un vehiculo para ver su ruta reciente, rumbo y siguiente destino estimado.";
+    panel.innerHTML = "Selecciona un vehiculo para ver su ruta reciente, rumbo y ETA por nodos restantes hasta destino final.";
     return;
   }
   const vehicle = state.vehicles.find((v) => v.vehicle_id === state.selectedVehicle);
@@ -1755,7 +1938,8 @@ function renderSelectedVehiclePanel() {
   const bearing = getTrailBearing(vehicle.vehicle_id);
   const nextNode = estimateNextNode(vehicle, bearing);
   const inferred = inferVehicleRoute(vehicle);
-  const eta = computeVehicleEta(vehicle);
+  const fullRoute = fullPlannedRouteForVehicle(vehicle);
+  const routeEtas = computeVehicleRouteEtas(vehicle);
   const displayBearing = state.truckHeadings.get(vehicle.vehicle_id) ?? bearing;
   const heading = displayBearing === null || displayBearing === undefined ? "-" : `${Math.round(displayBearing)}° (${bearingToCompass(displayBearing)})`;
   const nextLabel = nextNode ? `${nextNode.id} (${fmt.n(nextNode.dist, 1)} km)` : "-";
@@ -1766,9 +1950,13 @@ function renderSelectedVehiclePanel() {
         <tr><td><strong>Vehiculo</strong></td><td>${vehicle.vehicle_id}</td></tr>
         <tr><td><strong>Almacen actual</strong></td><td>${inferred.from?.id || vehicle.warehouse_id || "-"}</td></tr>
         <tr><td><strong>Ruta reportada</strong></td><td>${displayRouteForVehicle(vehicle)}</td></tr>
+        <tr><td><strong>Destino final</strong></td><td>${vehicle.planned_route_destination || inferred.to?.id || "-"}</td></tr>
+        <tr><td><strong>Nodos ruta</strong></td><td>${fullRoute?.nodes?.map((n) => n.id).join(" -> ") || "-"}</td></tr>
         <tr><td><strong>Rumbo actual</strong></td><td>${heading}</td></tr>
         <tr><td><strong>Siguiente nodo estimado</strong></td><td>${nextLabel}</td></tr>
-        <tr><td><strong>Hora estimada llegada</strong></td><td>${eta.etaLabel}</td></tr>
+        <tr><td><strong>ETA siguiente nodo</strong></td><td>${routeEtas.nextEtaLabel}</td></tr>
+        <tr><td><strong>ETA nodos restantes</strong></td><td>${routeEtas.remainingNodesVerbose}</td></tr>
+        <tr><td><strong>ETA destino final</strong></td><td>${routeEtas.finalEtaLabel}</td></tr>
         <tr><td><strong>Delay</strong></td><td>${vehicle.delay_minutes} min</td></tr>
         <tr><td><strong>Velocidad</strong></td><td>${fmt.n(vehicle.speed_kmh, 1)} km/h</td></tr>
       </tbody>
@@ -1784,6 +1972,22 @@ function renderProjectionLine() {
   if (!state.selectedVehicle) return;
   const vehicle = state.vehicles.find((v) => v.vehicle_id === state.selectedVehicle);
   if (!vehicle) return;
+  const etaRoute = computeVehicleRouteEtas(vehicle);
+  if (etaRoute.remainingNodes?.length) {
+    const points = [[vehicle.latitude, vehicle.longitude], ...etaRoute.remainingNodes.map((n) => [n.latitude, n.longitude])];
+    state.projectionLine = L.polyline(
+      points,
+      {
+        color: "#ffd166",
+        weight: 2,
+        dashArray: "8 6",
+        opacity: 0.9
+      }
+    ).addTo(state.map);
+    const label = etaRoute.remainingNodes.map((n) => n.id).join(" -> ");
+    state.projectionLine.bindTooltip(`Ruta restante: ${label || "-"}`, { sticky: true });
+    return;
+  }
   const bearing = getTrailBearing(vehicle.vehicle_id);
   const nextNode = estimateNextNode(vehicle, bearing);
   if (!nextNode) return;

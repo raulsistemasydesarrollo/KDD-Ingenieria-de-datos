@@ -45,7 +45,7 @@ Frase:
 5. **Patron horario**: `peak` vs `night`.
 6. **Evitar nodos**: recalculo con restriccion.
 7. **Insights live**: cuellos de botella + nodos criticos + historico.
-8. **Reentreno IA**: boton + estado + recomendacion por score de deriva.
+8. **Reentreno IA**: boton + estado + recomendacion + paneles de candidatos (izq: modelo en uso, der: descripciones).
 
 Frase:
 

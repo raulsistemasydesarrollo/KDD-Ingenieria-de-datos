@@ -21,6 +21,10 @@
         </div>
         <div class="header-actions">
           <div class="model-ops">
+            <div class="model-panels">
+              <div id="retrain-model-active" class="model-summary">Modelo en uso: cargando...</div>
+              <div id="retrain-model-candidates" class="model-summary model-summary-desc">Candidatos: cargando...</div>
+            </div>
             <button id="retrain-btn" type="button">Reentrenar IA</button>
             <span id="retrain-status" class="route-status">Modelo: estado no consultado</span>
             <button id="theme-btn" type="button">Modo claro</button>
@@ -45,7 +49,7 @@
           <span><i class="dot vehicle-live"></i>Vehiculo en operacion normal</span>
           <span><i class="dot vehicle-delay"></i>Vehiculo con delay >= 15 min</span>
           <span><i class="line trace-line"></i>Traza historica (solo vehiculo seleccionado)</span>
-          <span><i class="line projection-line"></i>Proyeccion al siguiente nodo (vehiculo seleccionado)</span>
+          <span><i class="line projection-line"></i>Proyeccion de ruta restante (vehiculo seleccionado)</span>
         </div>
         <div class="row">
           <label for="rt-source-select">Origen RT</label>
@@ -59,7 +63,7 @@
           <button id="play-btn">Pausar animacion</button>
         </div>
         <div class="summary" id="selected-vehicle-panel">
-          Selecciona un vehiculo para ver su ruta reciente, rumbo y siguiente destino estimado.
+          Selecciona un vehiculo para ver su ruta reciente, rumbo y ETA por nodos restantes hasta destino final.
         </div>
         <div class="table-wrap vehicle-table-wrap">
           <table id="vehicle-table">
@@ -71,7 +75,8 @@
                 <th>Ruta</th>
                 <th>Delay (min)</th>
                 <th>Velocidad</th>
-                <th>ETA</th>
+                <th>ETA nodos restantes</th>
+                <th>ETA destino final</th>
                 <th>Ultimo evento</th>
               </tr>
             </thead>

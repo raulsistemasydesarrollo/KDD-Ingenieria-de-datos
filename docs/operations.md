@@ -457,7 +457,9 @@ Para evitar inconsistencias de inferencia:
 2. Ese plan se expone por API en cada item como:
    - `planned_origin`
    - `planned_destination`
-3. El frontend prioriza estos campos para `Ruta reportada`, `Siguiente nodo` y linea de proyeccion.
+   - `planned_route_nodes`
+   - `planned_route_label`
+3. El frontend prioriza estos campos para `Ruta reportada`, `Siguiente nodo` y linea de proyeccion de ruta restante.
 
 ## Troubleshooting dashboard
 
@@ -473,7 +475,7 @@ Ctrl+F5
 2. Comprobar payload de vehiculos:
 
 ```bash
-docker compose exec -T dashboard python -c "import json,urllib.request;d=json.load(urllib.request.urlopen('http://127.0.0.1:8501/api/vehicles/latest?limit=10'));print([{k:i.get(k) for k in ('vehicle_id','warehouse_id','planned_origin','planned_destination')} for i in d.get('items',[])])"
+docker compose exec -T dashboard python -c "import json,urllib.request;d=json.load(urllib.request.urlopen('http://127.0.0.1:8501/api/vehicles/latest?limit=10'));print([{k:i.get(k) for k in ('vehicle_id','warehouse_id','planned_origin','planned_destination','planned_route_label')} for i in d.get('items',[])])"
 ```
 
 3. Verificar estado del plan del generador:
@@ -487,7 +489,7 @@ print(d.get('V1'))
 PY
 ```
 
-Si `planned_origin/planned_destination` no aparecen en API, reiniciar dashboard:
+Si `planned_origin/planned_destination` o `planned_route_nodes` no aparecen en API, reiniciar dashboard:
 
 ```bash
 docker compose restart dashboard
@@ -517,6 +519,11 @@ Nota tecnica:
 ## Reentreno IA del dashboard
 
 El dashboard expone operativa de reentreno de modelo desde la cabecera.
+
+Bloques de cabecera en estado actual:
+
+1. Panel izquierdo: `EN USO`, candidato elegido (`A/B/C`) y comparativa RMSE.
+2. Panel derecho: descripcion de los 3 candidatos en columna unica.
 
 ### Endpoints
 
@@ -550,5 +557,5 @@ curl -s http://localhost:8501/api/ml/retrain/status
 Tabla de estado de recomendacion/reentreno:
 
 ```bash
-docker compose exec -T cassandra cqlsh -e "SELECT model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, updated_at FROM transport.model_retrain_state;"
+docker compose exec -T cassandra cqlsh -e "SELECT model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, last_selected_model, last_selected_rmse, last_baseline_rmse, last_tuned_baseline_rmse, last_enhanced_rmse, updated_at FROM transport.model_retrain_state;"
 ```

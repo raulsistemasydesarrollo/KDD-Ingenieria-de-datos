@@ -73,13 +73,13 @@ El sistema esta empaquetado en Docker Compose, con scripts de arranque, validaci
   - analisis de red logistica y mejor ruta por perfil,
   - impacto meteorologico en ETA y penalizacion de ruta.
 - El dashboard usa Cassandra como fuente principal de flota y fallback a archivos NiFi si Cassandra no esta disponible.
-- El dashboard usa plan de trayecto por vehiculo (`planned_origin`, `planned_destination`) para reforzar coherencia de rutas visualizadas.
+- El dashboard usa plan de trayecto por vehiculo (`planned_origin`, `planned_destination`, `planned_route_nodes`) para reforzar coherencia de rutas visualizadas.
 - Los filtros de Tiempo Real y de Red Logistica estan desacoplados para evitar interferencias entre vistas.
 
 ## 3. Resultados funcionales alcanzados
 
 1. Visualizacion de vehiculos con trazas y foco por seleccion.
-2. Calculo de ETA por vehiculo con suavizado para evitar fluctuaciones bruscas.
+2. Calculo de ETA por vehiculo con suavizado para evitar fluctuaciones bruscas, incluyendo `ETA nodos restantes` y `ETA destino final`.
 3. Calculo de mejor ruta por perfiles (`balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`).
 4. Incorporacion real del factor meteorologico en estimaciones de tiempo.
 5. Representacion tabular de rutas y metricas (distancia, tiempos, penalizacion clima, factor aplicado).
@@ -91,7 +91,8 @@ El sistema esta empaquetado en Docker Compose, con scripts de arranque, validaci
 11. Operativa de reentreno IA desde dashboard:
    - trigger manual (`POST /api/ml/retrain`),
    - estado/recomendacion (`GET /api/ml/retrain/status`),
-   - score de deriva y logica de recomendacion con histeresis + cooldown.
+   - score de deriva y logica de recomendacion con histeresis + cooldown,
+   - paneles de cabecera con modelo en uso destacado y descripcion de candidatos.
 
 ## 4. Robustez y operaciones
 
