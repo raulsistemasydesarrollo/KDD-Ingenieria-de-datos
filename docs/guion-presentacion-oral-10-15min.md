@@ -6,6 +6,7 @@
 - Documento: `Guion de presentacion oral ante profesor`
 - Version: `v1.0`
 - Fecha: `02/04/2026`
+- Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## 1. Objetivo de la exposicion
 

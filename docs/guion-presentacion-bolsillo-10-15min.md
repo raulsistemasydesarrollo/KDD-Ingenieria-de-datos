@@ -1,5 +1,9 @@
 # Guion De Bolsillo (10-15 min)
 
+Repositorio GitHub:
+
+- `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
+
 ## 0) Apertura (20-30s)
 
 > "Voy a presentar una plataforma Big Data logistica completa: ingesta GPS/clima, procesamiento batch+streaming, analitica en Hive/Cassandra y dashboard operativo para decision de rutas."

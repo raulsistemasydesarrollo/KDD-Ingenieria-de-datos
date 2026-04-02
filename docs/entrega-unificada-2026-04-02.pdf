@@ -24,7 +24,7 @@ ET
 endstream
 endobj
 3 0 obj
-<< /Length 2993 >>
+<< /Length 3055 >>
 stream
 BT
 /F1 10 Tf
@@ -80,6 +80,8 @@ BT
 (- Version: v1.2) Tj
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
+0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
 0 -12 Td
 () Tj
 0 -12 Td
@@ -148,17 +150,17 @@ BT
 (- Routing logistico multiobjetivo:) Tj
 0 -12 Td
 (- perfiles balanced, fastest, resilient, eco, low_risk, reliable,) Tj
-0 -12 Td
-(- pesos tiempo/riesgo/eco,) Tj
 ET
 endstream
 endobj
 4 0 obj
-<< /Length 3502 >>
+<< /Length 3528 >>
 stream
 BT
 /F1 10 Tf
 48 794 Td
+(- pesos tiempo/riesgo/eco,) Tj
+0 -12 Td
 (- modo temporal \(auto, peak, offpeak, night\),) Tj
 0 -12 Td
 (- exclusion de nodos intermedios.) Tj
@@ -278,17 +280,17 @@ BT
 (- Comandos de validacion rapida) Tj
 0 -12 Td
 () Tj
-0 -12 Td
-() Tj
 ET
 endstream
 endobj
 5 0 obj
-<< /Length 2229 >>
+<< /Length 2264 >>
 stream
 BT
 /F1 10 Tf
 48 794 Td
+() Tj
+0 -12 Td
 (    ./scripts/start_kdd.sh) Tj
 0 -12 Td
 (    docker compose ps) Tj
@@ -401,24 +403,26 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Indice) Tj
 0 -12 Td
 () Tj
-0 -12 Td
-(- Que se ha construido) Tj
-0 -12 Td
-(- Arquitectura y flujo de valor) Tj
 ET
 endstream
 endobj
 6 0 obj
-<< /Length 2936 >>
+<< /Length 2978 >>
 stream
 BT
 /F1 10 Tf
 48 794 Td
+(- Que se ha construido) Tj
+0 -12 Td
+(- Arquitectura y flujo de valor) Tj
+0 -12 Td
 (- Resultados funcionales alcanzados) Tj
 0 -12 Td
 (- Robustez y operaciones) Tj
@@ -536,19 +540,19 @@ BT
 (- HDFS mantiene capa raw y curated.) Tj
 0 -12 Td
 () Tj
-0 -12 Td
-(Explotacion) Tj
-0 -12 Td
-() Tj
 ET
 endstream
 endobj
 7 0 obj
-<< /Length 3872 >>
+<< /Length 3856 >>
 stream
 BT
 /F1 10 Tf
 48 794 Td
+(Explotacion) Tj
+0 -12 Td
+() Tj
+0 -12 Td
 (- Dashboard con:) Tj
 0 -12 Td
 (- mapa operativo de flota en tiempo real,) Tj
@@ -666,19 +670,19 @@ BT
 () Tj
 0 -12 Td
 (Se han dejado documentos para operacion y defensa:) Tj
-0 -12 Td
-() Tj
-0 -12 Td
-(- Memoria tecnica completa:) Tj
 ET
 endstream
 endobj
 8 0 obj
-<< /Length 2688 >>
+<< /Length 2709 >>
 stream
 BT
 /F1 10 Tf
 48 794 Td
+() Tj
+0 -12 Td
+(- Memoria tecnica completa:) Tj
+0 -12 Td
 (- docs/memoria-tecnica-sistema.md) Tj
 0 -12 Td
 (- Operaciones y checklist:) Tj
@@ -745,6 +749,8 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Indice) Tj
@@ -794,21 +800,21 @@ BT
 (- docs/resumen-ejecutivo-memoria.md) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+9 0 obj
+<< /Length 3140 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Objetivo del sistema) Tj
 0 -12 Td
 () Tj
 0 -12 Td
 (El sistema implementa un ciclo KDD para analitica logistica, combinando:) Tj
-ET
-endstream
-endobj
-9 0 obj
-<< /Length 3130 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (- ingesta continua de GPS y meteorologia,) Tj
@@ -924,21 +930,21 @@ BT
 (- Spark streaming consume transport.weather.filtered y escribe:) Tj
 0 -12 Td
 (- vista operativa de consulta: transport_analytics.v_weather_observations_madrid,) Tj
-0 -12 Td
+ET
+endstream
+endobj
+10 0 obj
+<< /Length 2709 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- fallback Parquet: /data/curated/weather_observations_streaming.) Tj
 0 -12 Td
 () Tj
 0 -12 Td
 (3.3 Batch historico) Tj
-ET
-endstream
-endobj
-10 0 obj
-<< /Length 2749 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (- Spark batch lee hdfs://hadoop:9000/data/raw/gps_events.jsonl.) Tj
@@ -1054,21 +1060,21 @@ BT
 () Tj
 0 -12 Td
 (- matched de extract_gps_fields pasa por update_gps_archive_name antes de archivado local \(evita) Tj
-0 -12 Td
+ET
+endstream
+endobj
+11 0 obj
+<< /Length 2922 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (sobrescritura por split\).) Tj
 0 -12 Td
 (- filtered de route_gps_filtered va a Kafka filtrado.) Tj
 0 -12 Td
 (- Errores y unmatched van a gps_failure_sink.) Tj
-ET
-endstream
-endobj
-11 0 obj
-<< /Length 2825 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (4.4 Flujo Clima: procesadores y rol) Tj
@@ -1184,21 +1190,21 @@ BT
 (- Movimiento progresivo entre ciudades \(sin salto directo idealizado\).) Tj
 0 -12 Td
 (- Estado persistido en .vehicle_path_state.json para continuidad de trayectorias.) Tj
-0 -12 Td
+ET
+endstream
+endobj
+12 0 obj
+<< /Length 2362 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (Campos emitidos por evento:) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-12 0 obj
-<< /Length 2427 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- event_id, vehicle_id, warehouse_id, route_id, event_type,) Tj
 0 -12 Td
 (- latitude, longitude, delay_minutes, speed_kmh, event_time.) Tj
@@ -1314,21 +1320,21 @@ BT
 () Tj
 0 -12 Td
 (- Limpieza y normalizacion \(cleanAndNormalizeEvents\):) Tj
-0 -12 Td
+ET
+endstream
+endobj
+13 0 obj
+<< /Length 2837 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- event_time -> event_timestamp,) Tj
 0 -12 Td
 (- cast de delay_minutes, speed_kmh,) Tj
 0 -12 Td
 (- filtros de nulos clave.) Tj
-ET
-endstream
-endobj
-13 0 obj
-<< /Length 2770 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Deduplicacion por event_id.) Tj
 0 -12 Td
 (- Enriquecimiento con maestros \(warehouse + vehicle\).) Tj
@@ -1444,21 +1450,21 @@ BT
 (- /tmp/checkpoints/latest_vehicle_state) Tj
 0 -12 Td
 (- /tmp/checkpoints/weather_observations) Tj
-0 -12 Td
+ET
+endstream
+endobj
+14 0 obj
+<< /Length 2500 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (Compatibilidad operativa:) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-14 0 obj
-<< /Length 2629 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- El script scripts/ensure_hive_streaming_compat.sh asegura que existan:) Tj
 0 -12 Td
 (- transport_analytics.delay_metrics_streaming) Tj
@@ -1574,21 +1580,21 @@ BT
 () Tj
 0 -12 Td
 (Nota operativa:) Tj
-0 -12 Td
+ET
+endstream
+endobj
+15 0 obj
+<< /Length 2285 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- Si las tablas streaming fuente no estan disponibles temporalmente, los DAGs de healthcheck) Tj
 0 -12 Td
 (degradan a validaciones seguras para no producir falsos rojos.) Tj
-ET
-endstream
-endobj
-15 0 obj
-<< /Length 2185 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- En esta entrega, para consultas meteo de operacion se usa) Tj
 0 -12 Td
 (transport_analytics.v_weather_observations_madrid.) Tj
@@ -1704,21 +1710,21 @@ BT
 () Tj
 0 -12 Td
 (Backend:) Tj
-0 -12 Td
+ET
+endstream
+endobj
+16 0 obj
+<< /Length 3379 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- dashboard/server.py \(HTTP server multihilo\).) Tj
 0 -12 Td
 (- Lee:) Tj
-ET
-endstream
-endobj
-16 0 obj
-<< /Length 3487 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- estado de vehiculo desde Cassandra \(transport.vehicle_latest_state\) como fuente primaria,) Tj
 0 -12 Td
 (- fallback de GPS desde nifi/input si Cassandra no esta disponible,) Tj
@@ -1834,21 +1840,21 @@ BT
 (- priorizacion de planned_origin/planned_destination para evitar rutas X->X espurias y) Tj
 0 -12 Td
 (proyecciones incoherentes.) Tj
-0 -12 Td
+ET
+endstream
+endobj
+17 0 obj
+<< /Length 2090 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- selectores de origen/destino ordenados alfabeticamente en ambas vistas,) Tj
 0 -12 Td
 (- etiquetas de nodo RT en formato 3 letras y semitransparentes para no ocultar vehiculos.) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-17 0 obj
-<< /Length 1965 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Orquestacion de arranque y reset) Tj
 0 -12 Td
 () Tj
@@ -1964,21 +1970,21 @@ BT
 (    ./scripts/cleanup_nifi_legacy_pgs.py) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+18 0 obj
+<< /Length 2811 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- Puntos de resiliencia implementados) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-18 0 obj
-<< /Length 2842 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Fallback a Parquet cuando Hive streaming falla.) Tj
 0 -12 Td
 (- Manejo de excepciones en escritura Cassandra \(no bloquea pipeline\).) Tj
@@ -2047,6 +2053,8 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Objetivo) Tj
@@ -2092,7 +2100,15 @@ BT
 (- SplitText) Tj
 0 -12 Td
 (- 1 linea por evento) Tj
-0 -12 Td
+ET
+endstream
+endobj
+19 0 obj
+<< /Length 3038 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- EvaluateJsonPath) Tj
 0 -12 Td
 (- extraer vehicle_id, warehouse_id, event_type, delay_minutes) Tj
@@ -2100,15 +2116,7 @@ BT
 (- UpdateAttribute) Tj
 0 -12 Td
 (- filename = ${filename}_${fragment.index}_${UUID\(\)}.jsonl) Tj
-ET
-endstream
-endobj
-19 0 obj
-<< /Length 2935 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- objetivo: evitar sobrescritura en raw-archive/gps cuando SplitText genera multiples flowfiles) Tj
 0 -12 Td
 (desde un mismo archivo.) Tj
@@ -2222,7 +2230,15 @@ BT
 (- Servicio Docker: gps-generator) Tj
 0 -12 Td
 (- Script: scripts/gps_generator.py) Tj
-0 -12 Td
+ET
+endstream
+endobj
+20 0 obj
+<< /Length 2648 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Salida: nifi/input/*.jsonl) Tj
 0 -12 Td
 () Tj
@@ -2230,15 +2246,7 @@ BT
 (Bootstrap automatico NiFi) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-20 0 obj
-<< /Length 2880 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (Sin configurar a mano la UI, puedes crear y arrancar el flujo con:) Tj
 0 -12 Td
 () Tj
@@ -2295,6 +2303,8 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Indice) Tj
@@ -2350,7 +2360,15 @@ BT
 () Tj
 0 -12 Td
 (Fuentes de datos del dashboard) Tj
-0 -12 Td
+ET
+endstream
+endobj
+21 0 obj
+<< /Length 2843 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- Vehiculos en tiempo real: fuente primaria Cassandra \(transport.vehicle_latest_state\).) Tj
@@ -2360,15 +2378,7 @@ BT
 (- Plan de ruta por vehiculo \(origen/destino planificados\): nifi/input/.vehicle_path_state.json.) Tj
 0 -12 Td
 (- Clima reciente: fuente primaria Cassandra \(transport.weather_observations_recent\), cargada por) Tj
-ET
-endstream
-endobj
-21 0 obj
-<< /Length 2675 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (Spark Streaming.) Tj
 0 -12 Td
 (- Fallback de clima: nifi/raw-archive/weather \(snapshots Open-Meteo\) si Cassandra no esta) Tj
@@ -2480,7 +2490,15 @@ BT
 (- naranja: criticidad high) Tj
 0 -12 Td
 (- azul: criticidad medium) Tj
-0 -12 Td
+ET
+endstream
+endobj
+22 0 obj
+<< /Length 3626 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- etiqueta semitransparente para no ocultar vehiculos.) Tj
 0 -12 Td
 (- Etiquetas de nodo mostradas en codigo de 3 letras \(ej. MAD, BCN, GIJ\), alineadas con la vista) Tj
@@ -2490,15 +2508,7 @@ BT
 () Tj
 0 -12 Td
 (Filtros de Tiempo Real \(solo vista izquierda\)) Tj
-ET
-endstream
-endobj
-22 0 obj
-<< /Length 3744 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (- Origen RT y Destino RT filtran **solo** la vista de Operacion en Tiempo Real.) Tj
@@ -2610,7 +2620,15 @@ BT
 (- Perfil insights: recalcula score de impacto con los costes del perfil \(balanced, fastest,) Tj
 0 -12 Td
 (resilient, eco, low_risk, reliable\).) Tj
-0 -12 Td
+ET
+endstream
+endobj
+23 0 obj
+<< /Length 3082 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Congestion minima: filtra el ranking para mostrar solo tramos/nodos afectados por el nivel) Tj
 0 -12 Td
 (indicado \(all, low, medium, high\).) Tj
@@ -2620,15 +2638,7 @@ BT
 (perfil/congestion.) Tj
 0 -12 Td
 (- Si un tramo llega sin muestras live \(live_sample_count=0\) y congestion UNKNOWN, se normaliza a) Tj
-ET
-endstream
-endobj
-23 0 obj
-<< /Length 2952 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (low/medium/high con heuristica de delay/distancia para mantener consistencia visual.) Tj
 0 -12 Td
 () Tj
@@ -2740,7 +2750,15 @@ BT
 (- low_risk \(ETA estable, baja exposicion operativa\),) Tj
 0 -12 Td
 (- reliable \(maximiza fiabilidad de ETA\).) Tj
-0 -12 Td
+ET
+endstream
+endobj
+24 0 obj
+<< /Length 3083 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Evitar nodos: excluye nodos intermedios concretos del calculo.) Tj
 0 -12 Td
 (- Patron horario: aplica factor temporal por franja \(auto, peak, offpeak, night\).) Tj
@@ -2750,15 +2768,7 @@ BT
 (- Peso tiempo) Tj
 0 -12 Td
 (- Peso riesgo) Tj
-ET
-endstream
-endobj
-24 0 obj
-<< /Length 3018 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Peso eco) Tj
 0 -12 Td
 (  Se normalizan y se envian al backend como objective_time, objective_risk, objective_eco.) Tj
@@ -2870,7 +2880,15 @@ BT
 (Datos y nodos actuales) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+25 0 obj
+<< /Length 2289 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (Red actual \(15 nodos\): ACO, ALM, BCN, BIO, CAC, GIJ, LIS, MAD, MAL, MUR, OPO, SEV, VAL, VLL,) Tj
 0 -12 Td
 (ZAR.) Tj
@@ -2880,15 +2898,7 @@ BT
 (Flota actual \(15 vehiculos\):) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-25 0 obj
-<< /Length 2243 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Activos: 14) Tj
 0 -12 Td
 (- Mantenimiento: 1 \(TRUCK-004\)) Tj
@@ -2983,6 +2993,8 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Indice) Tj
@@ -2998,7 +3010,15 @@ BT
 (- Flujo NiFi) Tj
 0 -12 Td
 (- Validaciones) Tj
-0 -12 Td
+ET
+endstream
+endobj
+26 0 obj
+<< /Length 2632 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Politica de almacenamiento) Tj
 0 -12 Td
 (- Matriz operativa end-to-end) Tj
@@ -3010,15 +3030,7 @@ BT
 (- Zona horaria) Tj
 0 -12 Td
 (- Vistas Hive en hora Madrid) Tj
-ET
-endstream
-endobj
-26 0 obj
-<< /Length 2683 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Bitacora operativa) Tj
 0 -12 Td
 (- Operacion del dashboard \(estado final\)) Tj
@@ -3128,7 +3140,15 @@ BT
 (- Auto-recuperacion meteo:) Tj
 0 -12 Td
 (- tarea repopulate_hive_weather_if_empty,) Tj
-0 -12 Td
+ET
+endstream
+endobj
+27 0 obj
+<< /Length 2260 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- si weather_rows=0 en v_weather_observations_madrid, ejecuta) Tj
 0 -12 Td
 (./scripts/repopulate_hive_weather_from_cassandra.sh antes del smoke query de meteo.) Tj
@@ -3140,15 +3160,7 @@ BT
 () Tj
 0 -12 Td
 (- Cada DAG incluye on_failure_callback \(alerta en logs de Airflow\).) Tj
-ET
-endstream
-endobj
-27 0 obj
-<< /Length 2192 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Si defines AIRFLOW_ALERT_EMAIL, se habilita envio de email en fallo.) Tj
 0 -12 Td
 () Tj
@@ -3258,7 +3270,15 @@ BT
 (    ./scripts/validate_weather_parsing_fix.sh) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+28 0 obj
+<< /Length 2762 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (Politica de almacenamiento) Tj
@@ -3270,15 +3290,7 @@ BT
 () Tj
 0 -12 Td
 (- Capa raw: conservar entrada original en JSON/JSONL para trazabilidad y reprocesado.) Tj
-ET
-endstream
-endobj
-28 0 obj
-<< /Length 2751 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Capa curated: persistir salida transformada en Parquet para analitica eficiente.) Tj
 0 -12 Td
 () Tj
@@ -3388,7 +3400,15 @@ BT
 (wind_kmh FROM transport_analytics.v_weather_observations_madrid WHERE weather_timestamp_utc IS ) Tj
 0 -12 Td
 (NOT NULL ORDER BY weather_timestamp_utc DESC LIMIT 20;") Tj
-0 -12 Td
+ET
+endstream
+endobj
+29 0 obj
+<< /Length 2812 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 () Tj
@@ -3400,15 +3420,7 @@ BT
 () Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-29 0 obj
-<< /Length 2790 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (    docker compose exec -T cassandra cqlsh -e "SELECT bucket, weather_timestamp, ) Tj
 0 -12 Td
 (weather_event_id, warehouse_id, temperature_c, precipitation_mm, wind_kmh FROM ) Tj
@@ -3518,7 +3530,15 @@ BT
 () Tj
 0 -12 Td
 (Ver definicion de tabla:) Tj
-0 -12 Td
+ET
+endstream
+endobj
+30 0 obj
+<< /Length 2675 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 () Tj
@@ -3530,15 +3550,7 @@ BT
 () Tj
 0 -12 Td
 (Consultar estado de flota:) Tj
-ET
-endstream
-endobj
-30 0 obj
-<< /Length 2818 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 () Tj
@@ -3648,7 +3660,15 @@ BT
 () Tj
 0 -12 Td
 (Tabla de referencia rapida para trazar cada flujo desde origen hasta consumo analitico:) Tj
-0 -12 Td
+ET
+endstream
+endobj
+31 0 obj
+<< /Length 3225 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (| Flujo | Fuente | Kafka | HDFS | Hive |) Tj
@@ -3660,15 +3680,7 @@ BT
 (| No aplica \(capa raw\) |) Tj
 0 -12 Td
 (| GPS filtrado/normalizado | NiFi | transport.filtered | /data/curated/delay_metrics_streaming) Tj
-ET
-endstream
-endobj
-31 0 obj
-<< /Length 3119 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (\(fallback parquet streaming\) | transport_analytics.delay_metrics_streaming |) Tj
 0 -12 Td
 (| GPS enriquecido streaming | Spark streaming | transport.filtered |) Tj
@@ -3778,7 +3790,15 @@ BT
 (- kdd_daily_healthcheck) Tj
 0 -12 Td
 (- kdd_hourly_healthcheck) Tj
-0 -12 Td
+ET
+endstream
+endobj
+32 0 obj
+<< /Length 2601 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (Comprobacion SQL directa en metastore de Airflow:) Tj
@@ -3790,15 +3810,7 @@ BT
 (    docker exec airflow-postgres psql -U airflow -d airflow -c ") Tj
 0 -12 Td
 (    SELECT dag_id, count\(*\) AS failed_runs) Tj
-ET
-endstream
-endobj
-32 0 obj
-<< /Length 2640 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (    FROM dag_run) Tj
 0 -12 Td
 (    WHERE state='failed') Tj
@@ -3908,7 +3920,15 @@ BT
 () Tj
 0 -12 Td
 (Nota de tablas en tiempo real) Tj
-0 -12 Td
+ET
+endstream
+endobj
+33 0 obj
+<< /Length 2756 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- transport_analytics.enriched_events es historico batch.) Tj
@@ -3920,15 +3940,7 @@ BT
 () Tj
 0 -12 Td
 (Operacion del dashboard \(estado final\)) Tj
-ET
-endstream
-endobj
-33 0 obj
-<< /Length 2707 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (Desacople de vistas) Tj
@@ -4038,7 +4050,15 @@ BT
 (    docker compose exec -T dashboard python -c "import json,urllib.request;d=json.load\(urllib.re) Tj
 0 -12 Td
 (quest.urlopen\('http://127.0.0.1:8501/api/vehicles/latest?limit=10'\)\);print\([{k:i.get\(k\) for k in) Tj
-0 -12 Td
+ET
+endstream
+endobj
+34 0 obj
+<< /Length 2404 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 ( \('vehicle_id','warehouse_id','planned_origin','planned_destination'\)} for i in ) Tj
 0 -12 Td
 (d.get\('items',[]\)]\)") Tj
@@ -4050,15 +4070,7 @@ BT
 (- Verificar estado del plan del generador:) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-34 0 obj
-<< /Length 2430 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (    python3 - <<'PY') Tj
@@ -4168,7 +4180,15 @@ BT
 () Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+35 0 obj
+<< /Length 2724 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (    curl -s http://localhost:8501/api/ml/retrain/status) Tj
 0 -12 Td
 () Tj
@@ -4180,15 +4200,7 @@ BT
 () Tj
 0 -12 Td
 (- RETRAIN_COMMAND \(por defecto: docker exec spark-client /opt/spark-app/run-batch.sh\)) Tj
-ET
-endstream
-endobj
-35 0 obj
-<< /Length 2610 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- RETRAIN_TIMEOUT_SECONDS) Tj
 0 -12 Td
 (- RETRAIN_RECOMMEND_THRESHOLD) Tj
@@ -4249,6 +4261,8 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Indice) Tj
@@ -4296,7 +4310,15 @@ BT
 (- Diagrama de arquitectura) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+36 0 obj
+<< /Length 2729 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 ([imagen: Diagrama de arquitectura] \(./architecture-diagram.png\)) Tj
 0 -12 Td
 () Tj
@@ -4310,15 +4332,7 @@ BT
 () Tj
 0 -12 Td
 (- Componentes y responsabilidades) Tj
-ET
-endstream
-endobj
-36 0 obj
-<< /Length 2902 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (- gps-generator) Tj
@@ -4426,7 +4440,15 @@ BT
 (- Fallback controlado a ficheros NiFi para vehiculos/clima.) Tj
 0 -12 Td
 (- Filtros desacoplados por vista.) Tj
-0 -12 Td
+ET
+endstream
+endobj
+37 0 obj
+<< /Length 2848 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Insights live de red y resumen de aristas con telemetria \(live_edge_summary\).) Tj
 0 -12 Td
 (- Motor de rutas multiobjetivo con:) Tj
@@ -4440,15 +4462,7 @@ BT
 (- exclusion de nodos \(avoid_nodes\).) Tj
 0 -12 Td
 (- Operativa ML integrada:) Tj
-ET
-endstream
-endobj
-37 0 obj
-<< /Length 2651 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- trigger de reentreno \(/api/ml/retrain\),) Tj
 0 -12 Td
 (- estado/recomendacion \(/api/ml/retrain/status\),) Tj
@@ -4539,6 +4553,8 @@ BT
 0 -12 Td
 (- Fecha: 02/04/2026) Tj
 0 -12 Td
+(- Repositorio GitHub: https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
+0 -12 Td
 () Tj
 0 -12 Td
 (Indice) Tj
@@ -4554,7 +4570,15 @@ BT
 (- Airflow) Tj
 0 -12 Td
 (- NiFi) Tj
-0 -12 Td
+ET
+endstream
+endobj
+38 0 obj
+<< /Length 2869 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Scripts nuevos/actualizados) Tj
 0 -12 Td
 (- Verificaciones recomendadas) Tj
@@ -4570,15 +4594,7 @@ BT
 () Tj
 0 -12 Td
 (Addendum - 02/04/2026) Tj
-ET
-endstream
-endobj
-38 0 obj
-<< /Length 3134 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (Cambios adicionales aplicados en esta iteracion de cierre documental:) Tj
@@ -4684,7 +4700,15 @@ BT
 (Dashboard) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+39 0 obj
+<< /Length 3662 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Etiquetas de nodos en Tiempo Real normalizadas a codigos de 3 letras \(mismo criterio que Red) Tj
 0 -12 Td
 (Logistica\).) Tj
@@ -4700,15 +4724,7 @@ BT
 (- Leyendas refinadas en mapas de Tiempo Real y Red Logistica.) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-39 0 obj
-<< /Length 3704 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (Insights de red) Tj
 0 -12 Td
 () Tj
@@ -4814,7 +4830,15 @@ BT
 (- Mejora de marcadores de vehiculo y orientacion en sentido de marcha.) Tj
 0 -12 Td
 (- Inclusiones de ETA en panel de vehiculo.) Tj
-0 -12 Td
+ET
+endstream
+endobj
+40 0 obj
+<< /Length 3207 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Correccion de ETA incoherente por caché/suavizado:) Tj
 0 -12 Td
 (- resincronizacion inmediata cuando cambia el destino estimado,) Tj
@@ -4830,15 +4854,7 @@ BT
 (- Sustitucion de paneles/graficos redundantes por tablas de datos de rutas.) Tj
 0 -12 Td
 (- Calculo de clima y factor meteorologico enlazado a ruta seleccionada.) Tj
-ET
-endstream
-endobj
-40 0 obj
-<< /Length 3055 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Desacople de filtros entre vistas:) Tj
 0 -12 Td
 (- filtros propios para Tiempo Real \(Origen RT, Destino RT\),) Tj
@@ -4944,7 +4960,15 @@ BT
 (Solucion aplicada) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+41 0 obj
+<< /Length 2852 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (Se ajustaron smoke_query_weather y smoke_query_delay para:) Tj
 0 -12 Td
 () Tj
@@ -4960,15 +4984,7 @@ BT
 (weather_observations_streaming\).) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-41 0 obj
-<< /Length 2769 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (Se incorpora ademas auto-recuperacion meteo en ambos DAGs \(kdd_hourly_healthcheck y) Tj
 0 -12 Td
 (kdd_daily_healthcheck\):) Tj
@@ -5074,7 +5090,15 @@ BT
 (- Exporta snapshots meteo desde Cassandra \(transport.weather_observations_recent\).) Tj
 0 -12 Td
 (- Repuebla transport_analytics.weather_observations_streaming en Hive.) Tj
-0 -12 Td
+ET
+endstream
+endobj
+42 0 obj
+<< /Length 2868 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Verifica recuento final de transport_analytics.v_weather_observations_madrid.) Tj
 0 -12 Td
 () Tj
@@ -5090,15 +5114,7 @@ BT
 (- incorpora renombrado unico por split para archivado GPS) Tj
 0 -12 Td
 (\(${filename}_${fragment.index}_${UUID\(\)}.jsonl\),) Tj
-ET
-endstream
-endobj
-42 0 obj
-<< /Length 2936 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- mantiene wiring y controller service Kafka.) Tj
 0 -12 Td
 () Tj
@@ -5204,12 +5220,28 @@ BT
 (Proyecto Big Data KDD - Java 21 + Docker) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+43 0 obj
+<< /Length 3054 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (Implementacion de una plataforma Big Data orientada a logistica y transporte siguiendo el ciclo) Tj
 0 -12 Td
 (KDD del enunciado, usando Java 21 para la aplicacion Spark y una arquitectura desplegada con) Tj
 0 -12 Td
 (contenedores Docker.) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(Repositorio GitHub oficial del proyecto:) Tj
+0 -12 Td
+() Tj
+0 -12 Td
+(- https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos) Tj
 0 -12 Td
 () Tj
 0 -12 Td
@@ -5220,15 +5252,7 @@ BT
 (- NiFi 2.7.0: ingesta desde API/logs simulados y publicacion en Kafka.) Tj
 0 -12 Td
 (- Kafka 3.9.1 \(KRaft\): bus de eventos para crudo y filtrado.) Tj
-ET
-endstream
-endobj
-43 0 obj
-<< /Length 2858 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- gps-generator: generador continuo de logs GPS para alimentar NiFi \(nifi/input\).) Tj
 0 -12 Td
 (- raw-hdfs-loader: sincronizacion continua de raw archivado por NiFi hacia HDFS) Tj
@@ -5326,7 +5350,15 @@ BT
 (       docker compose exec hadoop bash /opt/hadoop/bootstrap/load-seed-data.sh) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+44 0 obj
+<< /Length 2419 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- Ejecutar el job batch/grafo:) Tj
@@ -5350,15 +5382,7 @@ BT
 (       sg docker -c "docker compose exec -T spark-client /opt/spark-app/run-insights-sync.sh") Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-44 0 obj
-<< /Length 2498 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (- Ejecutar el job de streaming:) Tj
@@ -5456,7 +5480,15 @@ BT
 (   Capacidades actuales de routing/analitica en dashboard:) Tj
 0 -12 Td
 (- Perfiles: balanced, fastest, resilient, eco, low_risk, reliable.) Tj
-0 -12 Td
+ET
+endstream
+endobj
+45 0 obj
+<< /Length 2227 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Multiobjetivo: pesos tiempo/riesgo/eco \(normalizados\).) Tj
 0 -12 Td
 (- Patron horario: auto, peak, offpeak, night.) Tj
@@ -5480,15 +5512,7 @@ BT
 (- Arranque completo del stack:) Tj
 0 -12 Td
 () Tj
-ET
-endstream
-endobj
-45 0 obj
-<< /Length 2165 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (      ./scripts/start_kdd.sh) Tj
@@ -5586,7 +5610,15 @@ BT
 (Para limpiar tablas/checkpoints de streaming \(quitar estado de pruebas\):) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+46 0 obj
+<< /Length 2979 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (    chmod +x scripts/reset_streaming_state.sh) Tj
@@ -5610,15 +5642,7 @@ BT
 () Tj
 0 -12 Td
 (Garantizar compatibilidad Hive de objetos streaming \(tablas/vistas Madrid\):) Tj
-ET
-endstream
-endobj
-46 0 obj
-<< /Length 3067 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 () Tj
@@ -5716,7 +5740,15 @@ BT
 (transport_analytics.v_weather_observations_madrid \(vista operativa\) |) Tj
 0 -12 Td
 (| Batch historico GPS | No aplica | /data/curated/enriched_events |) Tj
-0 -12 Td
+ET
+endstream
+endobj
+47 0 obj
+<< /Length 2395 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (transport_analytics.enriched_events, transport_analytics.delay_metrics_batch,) Tj
 0 -12 Td
 (transport_analytics.route_graph_metrics |) Tj
@@ -5740,15 +5772,7 @@ BT
 () Tj
 0 -12 Td
 (- transport_analytics.v_weather_observations_madrid) Tj
-ET
-endstream
-endobj
-47 0 obj
-<< /Length 2626 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- transport_analytics.v_delay_metrics_streaming_madrid) Tj
 0 -12 Td
 () Tj
@@ -5846,7 +5870,15 @@ BT
 (DAGs relevantes:) Tj
 0 -12 Td
 () Tj
-0 -12 Td
+ET
+endstream
+endobj
+48 0 obj
+<< /Length 3055 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- logistics_kdd_monthly_maintenance \(mantenimiento mensual\)) Tj
 0 -12 Td
 (- kdd_daily_healthcheck \(checklist diario automatizado\)) Tj
@@ -5870,15 +5902,7 @@ BT
 (./scripts/repopulate_hive_weather_from_cassandra.sh antes del smoke query meteo.) Tj
 0 -12 Td
 (- Si hay filas, no repueblan.) Tj
-ET
-endstream
-endobj
-48 0 obj
-<< /Length 3374 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 () Tj
 0 -12 Td
 (Alertas Airflow:) Tj
@@ -5976,7 +6000,15 @@ BT
 (- Etiquetas de nodos en mapa de Tiempo Real normalizadas a codigo de 3 letras \(igual que el mapa) Tj
 0 -12 Td
 (logistico\).) Tj
-0 -12 Td
+ET
+endstream
+endobj
+49 0 obj
+<< /Length 4487 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- Etiquetas de nodos de Tiempo Real con transparencia para no tapar vehiculos.) Tj
 0 -12 Td
 (- Selectores Origen/Destino \(RT y Red Logistica\) ordenados alfabeticamente.) Tj
@@ -6000,15 +6032,7 @@ BT
 (- Endpoint historico de insights: /api/network/insights/history.) Tj
 0 -12 Td
 (- Nuevo modo Spark insights-sync + launcher spark-app/run-insights-sync.sh para consolidar en) Tj
-ET
-endstream
-endobj
-49 0 obj
-<< /Length 4101 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (Hive:) Tj
 0 -12 Td
 (- transport_analytics.network_insights_snapshots_hive) Tj
@@ -6106,7 +6130,15 @@ BT
 (- En NiFi se evita sobrescritura de raw GPS: cada split se archiva con nombre unico) Tj
 0 -12 Td
 (\(${filename}_${fragment.index}_${UUID\(\)}.jsonl\).) Tj
-0 -12 Td
+ET
+endstream
+endobj
+50 0 obj
+<< /Length 3772 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (Notas) Tj
@@ -6130,15 +6162,7 @@ BT
 (- Guia operativa consolidada: docs/operations.md.) Tj
 0 -12 Td
 (- Guia de dashboard y leyenda visual: docs/dashboard.md.) Tj
-ET
-endstream
-endobj
-50 0 obj
-<< /Length 4033 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Endpoint debug de fuentes del dashboard: GET /api/debug/sources.) Tj
 0 -12 Td
 (- Plan TODO de cumplimiento del enunciado por fases KDD: docs/kdd-todo.md.) Tj
@@ -6236,7 +6260,15 @@ BT
 (- Red logistico-geografica consolidada:) Tj
 0 -12 Td
 (- 15 nodos \(ACO, ALM, BCN, BIO, CAC, GIJ, LIS, MAD, MAL, MUR, OPO, SEV, VAL, VLL, ZAR\),) Tj
-0 -12 Td
+ET
+endstream
+endobj
+51 0 obj
+<< /Length 3160 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 (- 15 vehiculos \(14 activos y 1 en mantenimiento\),) Tj
 0 -12 Td
 (- restricciones de conectividad por corredor y atajos prohibidos.) Tj
@@ -6260,15 +6292,7 @@ BT
 (- Dashboard actualizado con optimizacion multiobjetivo \(objective_time, objective_risk,) Tj
 0 -12 Td
 (objective_eco\), temporal_mode y exclusion de nodos \(avoid_nodes\).) Tj
-ET
-endstream
-endobj
-51 0 obj
-<< /Length 2725 >>
-stream
-BT
-/F1 10 Tf
-48 794 Td
+0 -12 Td
 (- Nuevos endpoints ML operativos en dashboard:) Tj
 0 -12 Td
 (- POST /api/ml/retrain) Tj
@@ -6366,7 +6390,15 @@ BT
 () Tj
 0 -12 Td
 (Documentation) Tj
-0 -12 Td
+ET
+endstream
+endobj
+52 0 obj
+<< /Length 554 >>
+stream
+BT
+/F1 10 Tf
+48 794 Td
 () Tj
 0 -12 Td
 (- Normalizacion de enlaces en docs/CODE-ANNOTATION-GUIDE.md a rutas relativas.) Tj
@@ -6391,270 +6423,275 @@ BT
 ET
 endstream
 endobj
-52 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
-endobj
 53 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
 endobj
 54 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
 endobj
 55 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
 endobj
 56 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
 endobj
 57 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
 endobj
 58 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 8 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
 endobj
 59 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 9 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 8 0 R >>
 endobj
 60 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 10 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 9 0 R >>
 endobj
 61 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 11 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 10 0 R >>
 endobj
 62 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 12 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 11 0 R >>
 endobj
 63 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 13 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 12 0 R >>
 endobj
 64 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 14 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 13 0 R >>
 endobj
 65 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 15 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 14 0 R >>
 endobj
 66 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 16 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 15 0 R >>
 endobj
 67 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 17 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 16 0 R >>
 endobj
 68 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 18 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 17 0 R >>
 endobj
 69 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 19 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 18 0 R >>
 endobj
 70 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 20 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 19 0 R >>
 endobj
 71 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 21 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 20 0 R >>
 endobj
 72 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 22 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 21 0 R >>
 endobj
 73 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 23 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 22 0 R >>
 endobj
 74 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 24 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 23 0 R >>
 endobj
 75 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 25 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 24 0 R >>
 endobj
 76 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 26 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 25 0 R >>
 endobj
 77 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 27 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 26 0 R >>
 endobj
 78 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 28 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 27 0 R >>
 endobj
 79 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 29 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 28 0 R >>
 endobj
 80 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 30 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 29 0 R >>
 endobj
 81 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 31 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 30 0 R >>
 endobj
 82 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 32 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 31 0 R >>
 endobj
 83 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 33 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 32 0 R >>
 endobj
 84 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 34 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 33 0 R >>
 endobj
 85 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 35 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 34 0 R >>
 endobj
 86 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 36 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 35 0 R >>
 endobj
 87 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 37 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 36 0 R >>
 endobj
 88 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 38 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 37 0 R >>
 endobj
 89 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 39 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 38 0 R >>
 endobj
 90 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 40 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 39 0 R >>
 endobj
 91 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 41 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 40 0 R >>
 endobj
 92 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 42 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 41 0 R >>
 endobj
 93 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 43 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 42 0 R >>
 endobj
 94 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 44 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 43 0 R >>
 endobj
 95 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 45 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 44 0 R >>
 endobj
 96 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 46 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 45 0 R >>
 endobj
 97 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 47 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 46 0 R >>
 endobj
 98 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 48 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 47 0 R >>
 endobj
 99 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 49 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 48 0 R >>
 endobj
 100 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 50 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 49 0 R >>
 endobj
 101 0 obj
-<< /Type /Page /Parent 102 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 51 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 50 0 R >>
 endobj
 102 0 obj
-<< /Type /Pages /Kids [52 0 R 53 0 R 54 0 R 55 0 R 56 0 R 57 0 R 58 0 R 59 0 R 60 0 R 61 0 R 62 0 R 63 0 R 64 0 R 65 0 R 66 0 R 67 0 R 68 0 R 69 0 R 70 0 R 71 0 R 72 0 R 73 0 R 74 0 R 75 0 R 76 0 R 77 0 R 78 0 R 79 0 R 80 0 R 81 0 R 82 0 R 83 0 R 84 0 R 85 0 R 86 0 R 87 0 R 88 0 R 89 0 R 90 0 R 91 0 R 92 0 R 93 0 R 94 0 R 95 0 R 96 0 R 97 0 R 98 0 R 99 0 R 100 0 R 101 0 R] /Count 50 >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 51 0 R >>
 endobj
 103 0 obj
-<< /Type /Catalog /Pages 102 0 R >>
+<< /Type /Page /Parent 104 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 52 0 R >>
+endobj
+104 0 obj
+<< /Type /Pages /Kids [53 0 R 54 0 R 55 0 R 56 0 R 57 0 R 58 0 R 59 0 R 60 0 R 61 0 R 62 0 R 63 0 R 64 0 R 65 0 R 66 0 R 67 0 R 68 0 R 69 0 R 70 0 R 71 0 R 72 0 R 73 0 R 74 0 R 75 0 R 76 0 R 77 0 R 78 0 R 79 0 R 80 0 R 81 0 R 82 0 R 83 0 R 84 0 R 85 0 R 86 0 R 87 0 R 88 0 R 89 0 R 90 0 R 91 0 R 92 0 R 93 0 R 94 0 R 95 0 R 96 0 R 97 0 R 98 0 R 99 0 R 100 0 R 101 0 R 102 0 R 103 0 R] /Count 51 >>
+endobj
+105 0 obj
+<< /Type /Catalog /Pages 104 0 R >>
 endobj
 xref
-0 104
+0 106
 0000000000 65535 f 
 0000000015 00000 n 
 0000000085 00000 n 
 0000000411 00000 n 
-0000003456 00000 n 
-0000007010 00000 n 
-0000009291 00000 n 
-0000012279 00000 n 
-0000016203 00000 n 
-0000018943 00000 n 
-0000022125 00000 n 
-0000024927 00000 n 
-0000027805 00000 n 
-0000030285 00000 n 
-0000033108 00000 n 
-0000035790 00000 n 
-0000038028 00000 n 
-0000041568 00000 n 
-0000043586 00000 n 
-0000046481 00000 n 
-0000049469 00000 n 
-0000052402 00000 n 
-0000055130 00000 n 
-0000058927 00000 n 
-0000061932 00000 n 
-0000065003 00000 n 
-0000067299 00000 n 
-0000070035 00000 n 
-0000072280 00000 n 
-0000075084 00000 n 
-0000077927 00000 n 
-0000080798 00000 n 
-0000083970 00000 n 
-0000086663 00000 n 
-0000089423 00000 n 
-0000091906 00000 n 
-0000094569 00000 n 
-0000097524 00000 n 
-0000100228 00000 n 
-0000103415 00000 n 
-0000107172 00000 n 
-0000110280 00000 n 
-0000113102 00000 n 
-0000116091 00000 n 
-0000119002 00000 n 
-0000121553 00000 n 
-0000123771 00000 n 
-0000126891 00000 n 
-0000129570 00000 n 
-0000132997 00000 n 
-0000137151 00000 n 
-0000141237 00000 n 
-0000144015 00000 n 
-0000144144 00000 n 
-0000144273 00000 n 
-0000144402 00000 n 
-0000144531 00000 n 
-0000144660 00000 n 
-0000144789 00000 n 
-0000144918 00000 n 
-0000145047 00000 n 
-0000145177 00000 n 
-0000145307 00000 n 
-0000145437 00000 n 
-0000145567 00000 n 
-0000145697 00000 n 
-0000145827 00000 n 
-0000145957 00000 n 
-0000146087 00000 n 
-0000146217 00000 n 
-0000146347 00000 n 
-0000146477 00000 n 
-0000146607 00000 n 
-0000146737 00000 n 
-0000146867 00000 n 
-0000146997 00000 n 
-0000147127 00000 n 
-0000147257 00000 n 
-0000147387 00000 n 
-0000147517 00000 n 
-0000147647 00000 n 
-0000147777 00000 n 
-0000147907 00000 n 
-0000148037 00000 n 
-0000148167 00000 n 
-0000148297 00000 n 
-0000148427 00000 n 
-0000148557 00000 n 
-0000148687 00000 n 
-0000148817 00000 n 
-0000148947 00000 n 
-0000149077 00000 n 
-0000149207 00000 n 
-0000149337 00000 n 
-0000149467 00000 n 
-0000149597 00000 n 
-0000149727 00000 n 
-0000149857 00000 n 
-0000149987 00000 n 
-0000150117 00000 n 
-0000150247 00000 n 
-0000150378 00000 n 
-0000150509 00000 n 
-0000150915 00000 n 
+0000003518 00000 n 
+0000007098 00000 n 
+0000009414 00000 n 
+0000012444 00000 n 
+0000016352 00000 n 
+0000019113 00000 n 
+0000022305 00000 n 
+0000025067 00000 n 
+0000028042 00000 n 
+0000030457 00000 n 
+0000033347 00000 n 
+0000035900 00000 n 
+0000038238 00000 n 
+0000041670 00000 n 
+0000043813 00000 n 
+0000046677 00000 n 
+0000049768 00000 n 
+0000052469 00000 n 
+0000055365 00000 n 
+0000059044 00000 n 
+0000062179 00000 n 
+0000065315 00000 n 
+0000067657 00000 n 
+0000070342 00000 n 
+0000072655 00000 n 
+0000075470 00000 n 
+0000078335 00000 n 
+0000081063 00000 n 
+0000084341 00000 n 
+0000086995 00000 n 
+0000089804 00000 n 
+0000092261 00000 n 
+0000095038 00000 n 
+0000097820 00000 n 
+0000100721 00000 n 
+0000103643 00000 n 
+0000107358 00000 n 
+0000110618 00000 n 
+0000113523 00000 n 
+0000116444 00000 n 
+0000119551 00000 n 
+0000122023 00000 n 
+0000124303 00000 n 
+0000127335 00000 n 
+0000129783 00000 n 
+0000132891 00000 n 
+0000137431 00000 n 
+0000141256 00000 n 
+0000144469 00000 n 
+0000145075 00000 n 
+0000145204 00000 n 
+0000145333 00000 n 
+0000145462 00000 n 
+0000145591 00000 n 
+0000145720 00000 n 
+0000145849 00000 n 
+0000145978 00000 n 
+0000146107 00000 n 
+0000146237 00000 n 
+0000146367 00000 n 
+0000146497 00000 n 
+0000146627 00000 n 
+0000146757 00000 n 
+0000146887 00000 n 
+0000147017 00000 n 
+0000147147 00000 n 
+0000147277 00000 n 
+0000147407 00000 n 
+0000147537 00000 n 
+0000147667 00000 n 
+0000147797 00000 n 
+0000147927 00000 n 
+0000148057 00000 n 
+0000148187 00000 n 
+0000148317 00000 n 
+0000148447 00000 n 
+0000148577 00000 n 
+0000148707 00000 n 
+0000148837 00000 n 
+0000148967 00000 n 
+0000149097 00000 n 
+0000149227 00000 n 
+0000149357 00000 n 
+0000149487 00000 n 
+0000149617 00000 n 
+0000149747 00000 n 
+0000149877 00000 n 
+0000150007 00000 n 
+0000150137 00000 n 
+0000150267 00000 n 
+0000150397 00000 n 
+0000150527 00000 n 
+0000150657 00000 n 
+0000150787 00000 n 
+0000150917 00000 n 
+0000151047 00000 n 
+0000151177 00000 n 
+0000151308 00000 n 
+0000151439 00000 n 
+0000151570 00000 n 
+0000151701 00000 n 
+0000152116 00000 n 
 trailer
-<< /Size 104 /Root 103 0 R >>
+<< /Size 106 /Root 105 0 R >>
 startxref
-150968
+152169
 %%EOF

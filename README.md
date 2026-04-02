@@ -2,6 +2,10 @@
 
 Implementacion de una plataforma Big Data orientada a logistica y transporte siguiendo el ciclo KDD del enunciado, usando Java 21 para la aplicacion Spark y una arquitectura desplegada con contenedores Docker.
 
+Repositorio GitHub oficial del proyecto:
+
+- `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
+
 ## Arquitectura
 
 - `NiFi 2.7.0`: ingesta desde API/logs simulados y publicacion en Kafka.

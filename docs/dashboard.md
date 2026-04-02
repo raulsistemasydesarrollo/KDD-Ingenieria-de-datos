@@ -6,6 +6,7 @@
 - Documento: `Especificacion funcional del dashboard`
 - Version: `v1.2`
 - Fecha: `02/04/2026`
+- Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
 
