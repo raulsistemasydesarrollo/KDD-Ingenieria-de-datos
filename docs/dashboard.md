@@ -234,6 +234,13 @@ Reglas operativas de recomendacion:
 - Enfriamiento tras exito (`RETRAIN_COOLDOWN_HOURS`) para evitar reentrenos consecutivos.
 - Persistencia de estado y recomendacion en Cassandra (`transport.model_retrain_state`).
 
+Comportamiento del job de reentreno (Spark batch):
+
+- Entrena y compara 3 candidatos (`baseline_rf`, `tuned_baseline_rf`, `enhanced_rf`).
+- `enhanced_rf` incluye features de clima y congestion alineadas por `warehouse_id` + ventana de 15 minutos para mejorar prediccion en condiciones operativas.
+- Selecciona automaticamente el de menor RMSE para persistir el modelo final.
+- Esto evita que un experimento de features degrade prediccion en produccion del dashboard.
+
 ## Reglas de interpretacion de ruta por vehiculo
 
 El dashboard prioriza para cada vehiculo:

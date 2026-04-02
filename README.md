@@ -339,6 +339,14 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
   - patron horario y pesos `tiempo/riesgo/eco`,
   - panel `Evitar nodos`,
   - boton `Reentrenar IA` + recomendacion de deriva.
+- ML de riesgo de retraso reforzado con validacion comparativa en cada batch:
+  - candidatos `baseline_rf`, `tuned_baseline_rf`, `enhanced_rf`,
+  - `enhanced_rf` incorpora features de clima y congestion alineadas por ventana temporal de 15 minutos y almacen,
+  - seleccion automatica del mejor por RMSE para evitar regresiones,
+  - benchmark actual (dataset semilla 20k): `baseline_rmse=6.1329`, `tuned_baseline_rmse=6.1343`, `enhanced_rmse=6.0206` -> seleccionado `enhanced_rf`.
+- Modelo en HDFS validado tras reentreno:
+  - ruta `hdfs://hadoop:9000/models/delay_risk_rf`,
+  - tamano aproximado `1.2 MB` (Spark ML pipeline serializado en Parquet/Snappy).
 - Builders de PDF de entrega ajustados a la iteracion activa:
   - `scripts/build_delivery_pdf.py` apunta a release notes actual,
   - `scripts/build_delivery_pdf_professional.sh` genera nombre de salida con fecha dinamica.

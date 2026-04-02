@@ -52,6 +52,8 @@
    - `GET /api/ml/retrain/status`,
    - estado persistido en `transport.model_retrain_state`.
 9. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
+10. Entrenamiento ML robustecido con comparativa automatica entre `baseline_rf`, `tuned_baseline_rf` y `enhanced_rf`, seleccionando el menor RMSE en cada batch/reentreno.
+    - `enhanced_rf` incorpora clima y congestion alineados temporalmente (ventanas de 15 minutos) y es el seleccionado en la validacion final de esta iteracion.
 
 ## 3. Checklist de revision previa a entrega
 

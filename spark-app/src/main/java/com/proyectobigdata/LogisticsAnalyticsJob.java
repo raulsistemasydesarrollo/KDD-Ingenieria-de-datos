@@ -40,6 +40,12 @@ import static org.apache.spark.sql.functions.to_timestamp;
 import static org.apache.spark.sql.functions.window;
 import static org.apache.spark.sql.functions.when;
 import static org.apache.spark.sql.functions.explode;
+import static org.apache.spark.sql.functions.sqrt;
+import static org.apache.spark.sql.functions.pow;
+import static org.apache.spark.sql.functions.hour;
+import static org.apache.spark.sql.functions.dayofweek;
+import static org.apache.spark.sql.functions.sin;
+import static org.apache.spark.sql.functions.cos;
 
 /**
  * Job principal del pipeline KDD logistico.
@@ -74,6 +80,9 @@ public final class LogisticsAnalyticsJob {
     private static final String CASSANDRA_INSIGHTS_TABLE = "network_insights_snapshots";
     private static final String HIVE_INSIGHTS_SNAPSHOTS_TABLE = DATABASE + ".network_insights_snapshots_hive";
     private static final String HIVE_INSIGHTS_HOURLY_TRENDS_TABLE = DATABASE + ".network_insights_hourly_trends";
+    private static final String WEATHER_STREAMING_TABLE = DATABASE + ".weather_observations_streaming";
+    private static final String DELAY_STREAMING_TABLE = DATABASE + ".delay_metrics_streaming";
+    private static final String DELAY_BATCH_TABLE = DATABASE + ".delay_metrics_batch";
 
     private LogisticsAnalyticsJob() {
     }
@@ -354,7 +363,10 @@ public final class LogisticsAnalyticsJob {
 
     private static Dataset<Row> enrichEvents(SparkSession spark, Dataset<Row> cleanedEvents) {
         // Join con maestros de almacenes y vehiculos para contexto analitico.
-        Dataset<Row> warehouses = spark.table(MASTER_WAREHOUSES_TABLE);
+        Dataset<Row> warehouses = spark.table(MASTER_WAREHOUSES_TABLE)
+                // Evita colision con coordenadas GPS del evento original.
+                .withColumnRenamed("latitude", "warehouse_latitude")
+                .withColumnRenamed("longitude", "warehouse_longitude");
         Dataset<Row> vehicles = spark.table(MASTER_VEHICLES_TABLE);
 
         return cleanedEvents
@@ -449,11 +461,44 @@ public final class LogisticsAnalyticsJob {
     private static void trainAndScoreDelayRiskModel(SparkSession spark, Dataset<Row> enrichedEvents) {
         // Entrena y aplica modelo de riesgo de retraso a estado reciente por vehiculo.
         try {
-            Dataset<Row> mlDataset = enrichedEvents
+            Dataset<Row> eventsWithMlContext = enrichEventsWithMlContext(spark, enrichedEvents);
+
+            Dataset<Row> mlDataset = eventsWithMlContext
                     .filter(col("delay_minutes").isNotNull())
                     .filter(col("speed_kmh").isNotNull())
                     .filter(col("warehouse_id").isNotNull())
+                    .filter(col("vehicle_id").isNotNull())
                     .filter(col("vehicle_type").isNotNull())
+                    .withColumn("route_id", coalesce(col("route_id"), lit("UNKNOWN")))
+                    .withColumn("capacity_kg", coalesce(col("capacity_kg"), lit(0)).cast(DataTypes.DoubleType))
+                    .withColumn(
+                            "warehouse_criticality_score",
+                            when(col("criticality").equalTo("high"), lit(1.0))
+                                    .when(col("criticality").equalTo("medium"), lit(0.6))
+                                    .when(col("criticality").equalTo("low"), lit(0.3))
+                                    .otherwise(lit(0.5)))
+                    .withColumn(
+                            "vehicle_status_score",
+                            when(col("status").equalTo("active"), lit(1.0))
+                                    .when(col("status").equalTo("maintenance"), lit(0.25))
+                                    .otherwise(lit(0.6)))
+                    .withColumn(
+                            "distance_to_warehouse_km",
+                            sqrt(
+                                    pow(col("latitude").minus(col("warehouse_latitude").cast(DataTypes.DoubleType)).multiply(lit(111.32)), 2.0)
+                                            .plus(pow(col("longitude").minus(col("warehouse_longitude").cast(DataTypes.DoubleType)).multiply(lit(85.39)), 2.0))))
+                    .withColumn("hour_of_day", hour(col("event_timestamp")).cast(DataTypes.DoubleType))
+                    .withColumn("day_of_week", dayofweek(col("event_timestamp")))
+                    .withColumn(
+                            "is_weekend",
+                            when(col("day_of_week").isin(1, 7), lit(1.0))
+                                    .otherwise(lit(0.0)))
+                    .withColumn(
+                            "hour_sin",
+                            sin(col("hour_of_day").multiply(lit((2.0 * Math.PI) / 24.0))))
+                    .withColumn(
+                            "hour_cos",
+                            cos(col("hour_of_day").multiply(lit((2.0 * Math.PI) / 24.0))))
                     .withColumn("label", col("delay_minutes").cast(DataTypes.DoubleType));
 
             long mlCount = mlDataset.count();
@@ -466,27 +511,120 @@ public final class LogisticsAnalyticsJob {
                     .setInputCol("vehicle_type")
                     .setOutputCol("vehicle_type_idx")
                     .setHandleInvalid("keep");
-            OneHotEncoder encoder = new OneHotEncoder()
+            StringIndexer routeIndexer = new StringIndexer()
+                    .setInputCol("route_id")
+                    .setOutputCol("route_idx")
+                    .setHandleInvalid("keep");
+            StringIndexer vehicleIdIndexer = new StringIndexer()
+                    .setInputCol("vehicle_id")
+                    .setOutputCol("vehicle_id_idx")
+                    .setHandleInvalid("keep");
+            OneHotEncoder baselineEncoder = new OneHotEncoder()
                     .setInputCols(new String[]{"warehouse_idx", "vehicle_type_idx"})
                     .setOutputCols(new String[]{"warehouse_ohe", "vehicle_type_ohe"});
-            VectorAssembler assembler = new VectorAssembler()
+            OneHotEncoder enhancedEncoder = new OneHotEncoder()
+                    .setInputCols(new String[]{"warehouse_idx", "vehicle_type_idx", "route_idx", "vehicle_id_idx"})
+                    .setOutputCols(new String[]{"warehouse_ohe", "vehicle_type_ohe", "route_ohe", "vehicle_id_ohe"});
+            VectorAssembler baselineAssembler = new VectorAssembler()
                     .setInputCols(new String[]{"speed_kmh", "warehouse_ohe", "vehicle_type_ohe"})
                     .setOutputCol("features");
-            RandomForestRegressor rf = new RandomForestRegressor()
+            VectorAssembler enhancedAssembler = new VectorAssembler()
+                    .setInputCols(new String[]{
+                            "speed_kmh",
+                            "capacity_kg",
+                            "warehouse_criticality_score",
+                            "vehicle_status_score",
+                            "distance_to_warehouse_km",
+                            "climate_temperature_c",
+                            "climate_precipitation_mm",
+                            "climate_wind_kmh",
+                            "climate_severity_score",
+                            "congestion_avg_delay_minutes",
+                            "congestion_avg_speed_kmh",
+                            "congestion_event_count",
+                            "congestion_pressure_score",
+                            "hour_sin",
+                            "hour_cos",
+                            "is_weekend",
+                            "warehouse_ohe",
+                            "vehicle_type_ohe",
+                            "route_ohe",
+                            "vehicle_id_ohe"
+                    })
+                    .setOutputCol("features");
+            RandomForestRegressor baselineRf = new RandomForestRegressor()
                     .setFeaturesCol("features")
                     .setLabelCol("label")
                     .setPredictionCol("prediction")
                     .setNumTrees(30)
                     .setMaxDepth(8);
+            RandomForestRegressor tunedBaselineRf = new RandomForestRegressor()
+                    .setFeaturesCol("features")
+                    .setLabelCol("label")
+                    .setPredictionCol("prediction")
+                    .setNumTrees(90)
+                    .setMaxDepth(12);
+            RandomForestRegressor enhancedRf = new RandomForestRegressor()
+                    .setFeaturesCol("features")
+                    .setLabelCol("label")
+                    .setPredictionCol("prediction")
+                    .setNumTrees(80)
+                    .setMaxDepth(10);
 
             WindowSpec latestByVehicle = Window.partitionBy("vehicle_id").orderBy(col("event_timestamp").desc());
-            Dataset<Row> latestState = enrichedEvents
+            Dataset<Row> latestState = eventsWithMlContext
                     .withColumn("row_num", row_number().over(latestByVehicle))
                     .filter(col("row_num").equalTo(1))
+                    .withColumn("route_id", coalesce(col("route_id"), lit("UNKNOWN")))
+                    .withColumn("capacity_kg", coalesce(col("capacity_kg"), lit(0)).cast(DataTypes.DoubleType))
+                    .withColumn(
+                            "warehouse_criticality_score",
+                            when(col("criticality").equalTo("high"), lit(1.0))
+                                    .when(col("criticality").equalTo("medium"), lit(0.6))
+                                    .when(col("criticality").equalTo("low"), lit(0.3))
+                                    .otherwise(lit(0.5)))
+                    .withColumn(
+                            "vehicle_status_score",
+                            when(col("status").equalTo("active"), lit(1.0))
+                                    .when(col("status").equalTo("maintenance"), lit(0.25))
+                                    .otherwise(lit(0.6)))
+                    .withColumn(
+                            "distance_to_warehouse_km",
+                            sqrt(
+                                    pow(col("latitude").minus(col("warehouse_latitude").cast(DataTypes.DoubleType)).multiply(lit(111.32)), 2.0)
+                                            .plus(pow(col("longitude").minus(col("warehouse_longitude").cast(DataTypes.DoubleType)).multiply(lit(85.39)), 2.0))))
+                    .withColumn("hour_of_day", hour(col("event_timestamp")).cast(DataTypes.DoubleType))
+                    .withColumn("day_of_week", dayofweek(col("event_timestamp")))
+                    .withColumn(
+                            "is_weekend",
+                            when(col("day_of_week").isin(1, 7), lit(1.0))
+                                    .otherwise(lit(0.0)))
+                    .withColumn(
+                            "hour_sin",
+                            sin(col("hour_of_day").multiply(lit((2.0 * Math.PI) / 24.0))))
+                    .withColumn(
+                            "hour_cos",
+                            cos(col("hour_of_day").multiply(lit((2.0 * Math.PI) / 24.0))))
                     .select(
                             col("vehicle_id"),
                             col("warehouse_id"),
+                            col("route_id"),
                             col("vehicle_type"),
+                            col("capacity_kg"),
+                            col("warehouse_criticality_score"),
+                            col("vehicle_status_score"),
+                            col("distance_to_warehouse_km"),
+                            col("climate_temperature_c"),
+                            col("climate_precipitation_mm"),
+                            col("climate_wind_kmh"),
+                            col("climate_severity_score"),
+                            col("congestion_avg_delay_minutes"),
+                            col("congestion_avg_speed_kmh"),
+                            col("congestion_event_count"),
+                            col("congestion_pressure_score"),
+                            col("hour_sin"),
+                            col("hour_cos"),
+                            col("is_weekend"),
                             col("speed_kmh"),
                             col("event_timestamp"));
 
@@ -503,20 +641,55 @@ public final class LogisticsAnalyticsJob {
                     test = mlDataset;
                 }
 
-                Pipeline pipeline = new Pipeline().setStages(new PipelineStage[]{
-                        warehouseIndexer, vehicleTypeIndexer, encoder, assembler, rf});
-                PipelineModel model = pipeline.fit(train);
+                Pipeline baselinePipeline = new Pipeline().setStages(new PipelineStage[]{
+                        warehouseIndexer, vehicleTypeIndexer, baselineEncoder, baselineAssembler, baselineRf});
+                PipelineModel baselineModel = baselinePipeline.fit(train);
+                Dataset<Row> baselineScoredTest = baselineModel.transform(test);
+                Pipeline tunedBaselinePipeline = new Pipeline().setStages(new PipelineStage[]{
+                        warehouseIndexer, vehicleTypeIndexer, baselineEncoder, baselineAssembler, tunedBaselineRf});
+                PipelineModel tunedBaselineModel = tunedBaselinePipeline.fit(train);
+                Dataset<Row> tunedBaselineScoredTest = tunedBaselineModel.transform(test);
 
-                Dataset<Row> scoredTest = model.transform(test);
+                Pipeline enhancedPipeline = new Pipeline().setStages(new PipelineStage[]{
+                        warehouseIndexer,
+                        vehicleTypeIndexer,
+                        routeIndexer,
+                        vehicleIdIndexer,
+                        enhancedEncoder,
+                        enhancedAssembler,
+                        enhancedRf
+                });
+                PipelineModel enhancedModel = enhancedPipeline.fit(train);
+                Dataset<Row> enhancedScoredTest = enhancedModel.transform(test);
                 RegressionEvaluator evaluator = new RegressionEvaluator()
                         .setLabelCol("label")
                         .setPredictionCol("prediction")
                         .setMetricName("rmse");
-                double rmse = evaluator.evaluate(scoredTest);
-                System.out.println("INFO: Modelo ML delay risk entrenado. RMSE test = " + rmse);
-                model.write().overwrite().save(DELAY_RISK_MODEL_PATH);
+                double baselineRmse = evaluator.evaluate(baselineScoredTest);
+                double tunedBaselineRmse = evaluator.evaluate(tunedBaselineScoredTest);
+                double enhancedRmse = evaluator.evaluate(enhancedScoredTest);
+                PipelineModel selectedModel = baselineModel;
+                double selectedRmse = baselineRmse;
+                String selectedName = "baseline_rf";
+                if (tunedBaselineRmse < selectedRmse) {
+                    selectedModel = tunedBaselineModel;
+                    selectedRmse = tunedBaselineRmse;
+                    selectedName = "tuned_baseline_rf";
+                }
+                if (enhancedRmse < selectedRmse) {
+                    selectedModel = enhancedModel;
+                    selectedRmse = enhancedRmse;
+                    selectedName = "enhanced_rf";
+                }
+                System.out.println(
+                        "INFO: ML A/B delay risk => baseline_rmse=" + baselineRmse
+                                + " | tuned_baseline_rmse=" + tunedBaselineRmse
+                                + " | enhanced_rmse=" + enhancedRmse
+                                + " | selected=" + selectedName
+                                + " | selected_rmse=" + selectedRmse);
+                selectedModel.write().overwrite().save(DELAY_RISK_MODEL_PATH);
 
-                scoredLatest = model.transform(latestState)
+                scoredLatest = selectedModel.transform(latestState)
                         .withColumn("predicted_delay_minutes", col("prediction").cast(DataTypes.DoubleType))
                         .withColumn(
                                 "risk_level",
@@ -556,6 +729,100 @@ public final class LogisticsAnalyticsJob {
                             + "Se continúa con el pipeline. Causa: "
                             + mlFailure.getMessage());
         }
+    }
+
+    private static Dataset<Row> enrichEventsWithMlContext(SparkSession spark, Dataset<Row> enrichedEvents) {
+        Dataset<Row> weatherFeatures = buildWindowedWeatherFeatures(spark);
+        Dataset<Row> congestionFeatures = buildWindowedCongestionFeatures(spark);
+        Dataset<Row> eventsWithWindow = enrichedEvents
+                .withColumn("feature_window", window(col("event_timestamp"), "15 minutes"))
+                .withColumn("feature_window_start", col("feature_window.start"))
+                .drop("feature_window");
+
+        return eventsWithWindow
+                .join(weatherFeatures, new String[]{"warehouse_id", "feature_window_start"}, "left")
+                .join(congestionFeatures, new String[]{"warehouse_id", "feature_window_start"}, "left")
+                .withColumn("climate_temperature_c", coalesce(col("climate_temperature_c"), lit(18.0)))
+                .withColumn("climate_precipitation_mm", coalesce(col("climate_precipitation_mm"), lit(0.0)))
+                .withColumn("climate_wind_kmh", coalesce(col("climate_wind_kmh"), lit(0.0)))
+                .withColumn("climate_severity_score", coalesce(col("climate_severity_score"), lit(0.0)))
+                .withColumn("congestion_avg_delay_minutes", coalesce(col("congestion_avg_delay_minutes"), lit(0.0)))
+                .withColumn("congestion_avg_speed_kmh", coalesce(col("congestion_avg_speed_kmh"), lit(0.0)))
+                .withColumn("congestion_event_count", coalesce(col("congestion_event_count"), lit(0.0)))
+                .withColumn("congestion_pressure_score", coalesce(col("congestion_pressure_score"), lit(0.0)))
+                .drop("feature_window_start");
+    }
+
+    private static Dataset<Row> buildWindowedWeatherFeatures(SparkSession spark) {
+        if (!spark.catalog().tableExists(WEATHER_STREAMING_TABLE)) {
+            return spark.table(MASTER_WAREHOUSES_TABLE)
+                    .select(col("warehouse_id"))
+                    .limit(0)
+                    .withColumn("feature_window_start", lit(null).cast(DataTypes.TimestampType))
+                    .withColumn("climate_temperature_c", lit(null).cast(DataTypes.DoubleType))
+                    .withColumn("climate_precipitation_mm", lit(null).cast(DataTypes.DoubleType))
+                    .withColumn("climate_wind_kmh", lit(null).cast(DataTypes.DoubleType))
+                    .withColumn("climate_severity_score", lit(null).cast(DataTypes.DoubleType));
+        }
+
+        return spark.table(WEATHER_STREAMING_TABLE)
+                .filter(col("warehouse_id").isNotNull())
+                .filter(col("weather_timestamp").isNotNull())
+                .withColumn("feature_window", window(col("weather_timestamp"), "15 minutes"))
+                .groupBy(col("warehouse_id"), col("feature_window.start").alias("feature_window_start"))
+                .agg(
+                        avg(col("temperature_c").cast(DataTypes.DoubleType)).alias("climate_temperature_c"),
+                        avg(col("precipitation_mm").cast(DataTypes.DoubleType)).alias("climate_precipitation_mm"),
+                        avg(col("wind_kmh").cast(DataTypes.DoubleType)).alias("climate_wind_kmh"))
+                .select(
+                        col("warehouse_id"),
+                        col("feature_window_start"),
+                        col("climate_temperature_c"),
+                        col("climate_precipitation_mm"),
+                        col("climate_wind_kmh"))
+                .withColumn(
+                        "climate_severity_score",
+                        coalesce(col("climate_precipitation_mm"), lit(0.0)).multiply(lit(3.0))
+                                .plus(coalesce(col("climate_wind_kmh"), lit(0.0)).multiply(lit(0.15))));
+    }
+
+    private static Dataset<Row> buildWindowedCongestionFeatures(SparkSession spark) {
+        String sourceTable = null;
+        if (spark.catalog().tableExists(DELAY_STREAMING_TABLE)) {
+            sourceTable = DELAY_STREAMING_TABLE;
+        } else if (spark.catalog().tableExists(DELAY_BATCH_TABLE)) {
+            sourceTable = DELAY_BATCH_TABLE;
+        }
+
+        if (sourceTable == null) {
+            return spark.table(MASTER_WAREHOUSES_TABLE)
+                    .select(col("warehouse_id"))
+                    .limit(0)
+                    .withColumn("feature_window_start", lit(null).cast(DataTypes.TimestampType))
+                    .withColumn("congestion_avg_delay_minutes", lit(null).cast(DataTypes.DoubleType))
+                    .withColumn("congestion_avg_speed_kmh", lit(null).cast(DataTypes.DoubleType))
+                    .withColumn("congestion_event_count", lit(null).cast(DataTypes.DoubleType))
+                    .withColumn("congestion_pressure_score", lit(null).cast(DataTypes.DoubleType));
+        }
+
+        return spark.table(sourceTable)
+                .filter(col("warehouse_id").isNotNull())
+                .select(
+                        col("warehouse_id"),
+                        col("window_start").alias("feature_window_start"),
+                        coalesce(col("avg_delay_minutes"), lit(0.0)).cast(DataTypes.DoubleType)
+                                .alias("congestion_avg_delay_minutes"),
+                        coalesce(col("avg_speed_kmh"), lit(0.0)).cast(DataTypes.DoubleType)
+                                .alias("congestion_avg_speed_kmh"),
+                        coalesce(col("event_count"), lit(0)).cast(DataTypes.DoubleType)
+                                .alias("congestion_event_count"))
+                .withColumn(
+                        "congestion_pressure_score",
+                        coalesce(col("congestion_avg_delay_minutes"), lit(0.0)).multiply(lit(1.5))
+                                .plus(when(coalesce(col("congestion_avg_speed_kmh"), lit(0.0)).gt(0.0), lit(100.0).divide(col("congestion_avg_speed_kmh")))
+                                        .otherwise(lit(0.0)))
+                                .plus(when(coalesce(col("congestion_event_count"), lit(0.0)).gt(0.0), lit(10.0).divide(sqrt(col("congestion_event_count"))))
+                                        .otherwise(lit(0.0))));
     }
 
     private static Dataset<Row> cleanAndNormalizeEvents(Dataset<Row> events) {

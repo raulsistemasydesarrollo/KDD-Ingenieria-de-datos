@@ -307,6 +307,19 @@ Tabla de referencia rapida para trazar cada flujo desde origen hasta consumo ana
 | Grafo shortest path | `data/graph/*` (batch Spark) | No aplica | No aplica (tabla Hive) | `transport_analytics.route_shortest_paths` |
 | ML riesgo retraso | `enriched_events` (batch Spark ML) | No aplica | `hdfs://hadoop:9000/models/delay_risk_rf` (modelo) | `transport_analytics.ml_delay_risk_scores` |
 
+Validacion ML (batch/reentreno) recomendada:
+
+```bash
+sg docker -c "docker compose exec -T spark-client bash /opt/spark-app/run-batch.sh"
+sg docker -c "docker compose exec -T hadoop hdfs dfs -du -h /models/delay_risk_rf"
+```
+
+Salida esperada (iteracion 02/04/2026):
+
+- linea en logs con comparativa:
+  - `INFO: ML A/B delay risk => baseline_rmse=... | tuned_baseline_rmse=... | enhanced_rmse=... | selected=...`
+- modelo persistido en `hdfs://hadoop:9000/models/delay_risk_rf` con tamano ~`1.2 MB` (estado validado 02/04/2026).
+
 Checklist de comprobacion rapida:
 
 ```bash

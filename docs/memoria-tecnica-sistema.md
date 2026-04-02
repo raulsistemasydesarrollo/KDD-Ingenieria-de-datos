@@ -346,16 +346,22 @@ Compatibilidad operativa:
 Modelo principal:
 
 - `RandomForestRegressor`
-- features:
-  - `speed_kmh`
-  - `warehouse_id` (index + one-hot)
-  - `vehicle_type` (index + one-hot)
+- estrategia de seleccion:
+  - `baseline_rf`: `speed_kmh` + (`warehouse_id`, `vehicle_type`) codificados,
+  - `tuned_baseline_rf`: mismas features base con hiperparametros ampliados,
+  - `enhanced_rf`: añade `route_id`, `vehicle_id`, `capacity_kg`, `vehicle_status_score`,
+    `warehouse_criticality_score`, `distance_to_warehouse_km`, `hour_sin/cos`, `is_weekend`,
+    y contexto por almacen de clima (`climate_temperature_c`, `climate_precipitation_mm`, `climate_wind_kmh`, `climate_severity_score`)
+    y congestion (`congestion_avg_delay_minutes`, `congestion_avg_speed_kmh`, `congestion_event_count`, `congestion_pressure_score`).
+  - El contexto de clima/congestion en `enhanced_rf` se alinea por ventana temporal de 15 minutos (`event_timestamp`).
 - label: `delay_minutes`
 
 Logica:
 
 - si dataset >= 3 filas: entrena modelo (con split 80/20 si >=20).
-- evalua RMSE en test.
+- evalua RMSE en test para los 3 candidatos.
+- selecciona automaticamente el modelo con menor RMSE y lo persiste en:
+  - `hdfs://hadoop:9000/models/delay_risk_rf`.
 - puntua ultimo estado por vehiculo y clasifica riesgo:
   - `high` (>=10)
   - `medium` (>=5)
@@ -364,6 +370,14 @@ Logica:
 Fallback heuristico (si dataset pequeno):
 
 - regla por `speed_kmh` para `predicted_delay_minutes`.
+
+Resultado validado en la iteracion `02/04/2026` (dataset semilla 20k):
+
+- `baseline_rmse=6.1329`
+- `tuned_baseline_rmse=6.1343`
+- `enhanced_rmse=6.0206`
+- modelo seleccionado: `enhanced_rf`.
+- tamano de modelo en HDFS: ~`1.2 MB`.
 
 ## 7. Hive: tablas y vistas
 

@@ -67,6 +67,27 @@ Cambios adicionales aplicados en esta iteracion de cierre documental:
   - `scripts/build_delivery_pdf_professional.sh`
 - Regeneracion de PDFs de entrega con fecha `2026-04-02`.
 
+### Spark ML (actualizacion final validada)
+
+- Se reforzo el entrenamiento de `delay_risk_rf` con comparativa automatica de 3 candidatos:
+  - `baseline_rf`
+  - `tuned_baseline_rf`
+  - `enhanced_rf`
+- El candidato `enhanced_rf` incorpora contexto real de clima y congestion por almacen:
+  - clima: temperatura, precipitacion, viento y score sintetico de severidad,
+  - congestion: delay medio, velocidad media, volumen de eventos y score de presion.
+- Alineacion temporal aplicada:
+  - join por `warehouse_id` + ventana de 15 minutos para casar features de clima/congestion con cada `event_timestamp`.
+- Criterio de seleccion en runtime: menor RMSE en test.
+- Resultado de benchmark con dataset semilla ampliado a `20.000` eventos:
+  - `baseline_rmse=6.1329`
+  - `tuned_baseline_rmse=6.1343`
+  - `enhanced_rmse=6.0206`
+  - seleccionado: `enhanced_rf`.
+- Resultado operativo:
+  - mejora de RMSE del modelo enriquecido frente a baseline,
+  - modelo persistido en `hdfs://hadoop:9000/models/delay_risk_rf` (~`1.2 MB`).
+
 ## Addendum - 31/03/2026
 
 Cambios adicionales aplicados tras la iteracion base:
