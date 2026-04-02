@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Resumen ejecutivo para memoria`
-- Version: `v1.1`
-- Fecha: `31/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Indice
 
@@ -79,13 +79,18 @@ El sistema esta empaquetado en Docker Compose, con scripts de arranque, validaci
 
 1. Visualizacion de vehiculos con trazas y foco por seleccion.
 2. Calculo de ETA por vehiculo con suavizado para evitar fluctuaciones bruscas.
-3. Calculo de mejor ruta por perfiles (`balanced`, `fastest`, `resilient`).
+3. Calculo de mejor ruta por perfiles (`balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`).
 4. Incorporacion real del factor meteorologico en estimaciones de tiempo.
 5. Representacion tabular de rutas y metricas (distancia, tiempos, penalizacion clima, factor aplicado).
 6. Modo oscuro por defecto y cambio claro/oscuro en frontend.
 7. Filtros RT parciales y completos (`TODOS->X`, `X->TODOS`, `X->Y`) con limpieza de seleccion fuera de filtro.
 8. Insights live de red (cuellos de botella + nodos criticos + historico).
 9. Tablas ordenables y selectores alfabeticos en ambas vistas.
+10. Optimizacion multiobjetivo en routing con pesos `tiempo/riesgo/eco`, modo temporal (`auto`, `peak`, `offpeak`, `night`) y exclusion de nodos intermedios.
+11. Operativa de reentreno IA desde dashboard:
+   - trigger manual (`POST /api/ml/retrain`),
+   - estado/recomendacion (`GET /api/ml/retrain/status`),
+   - score de deriva y logica de recomendacion con histeresis + cooldown.
 
 ## 4. Robustez y operaciones
 
@@ -108,6 +113,7 @@ Se incorporaron mejoras de estabilidad relevantes para entrega:
   - Endpoint de diagnostico de fuentes: `/api/debug/sources`
   - Fuente vehiculos: Cassandra (primaria), `nifi/input` (fallback).
   - Endpoint de historico insights: `/api/network/insights/history`.
+  - Endpoints ML de operacion: `/api/ml/retrain` y `/api/ml/retrain/status`.
   - Red consolidada en 15 nodos y flota de 15 vehiculos (14 activos + 1 mantenimiento).
 
 ## 6. Entregables documentales
@@ -121,7 +127,7 @@ Se han dejado documentos para operacion y defensa:
 3. Dashboard y leyenda funcional:
    - `docs/dashboard.md`
 4. Release notes de iteracion:
-   - `docs/release-notes-2026-03-30.md`
+   - `docs/release-notes-2026-04-02.md`
 
 ## 7. Conclusiones
 

@@ -39,6 +39,7 @@ Estado:
   - Cassandra (ultimo estado por vehiculo).
 - `[x]` Simulacion GPS realista sobre grafo logistico (rutas calculadas + reasignacion dinamica).
 - `[x]` Componente ML minimo implementado (modelo de riesgo de retraso con Spark ML y scoring en Hive).
+- `[x]` Operativa de reentreno IA expuesta en dashboard (`POST /api/ml/retrain`, `GET /api/ml/retrain/status`) con persistencia de estado en Cassandra.
 
 ## Fase IV: Orquestacion (Airflow)
 
@@ -56,6 +57,7 @@ Estado:
 - `[x]` Hadoop/HDFS en pseudodistribuido de nodo unico.
 - `[x]` Stack Apache en versiones exigidas o superiores.
 - `[x]` Separacion raw JSON / procesado Parquet documentada y operativa.
+- `[x]` Dashboard con optimizacion de rutas multiobjetivo (perfiles ampliados, pesos tiempo/riesgo/eco, modo temporal y exclusion de nodos).
 
 ## Plan de cierre (priorizado)
 

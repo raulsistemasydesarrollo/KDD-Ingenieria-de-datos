@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Memoria tecnica del sistema`
-- Version: `v1.1`
-- Fecha: `31/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Indice
 
@@ -448,7 +448,7 @@ Alertas:
 
 Captura de estado operativo del dashboard:
 
-![Dashboard logistica (21 vehiculos activos)](./dashboard.png)
+![Dashboard logistica (captura actualizada 02/04/2026)](./dashboard.png)
 
 Backend:
 
@@ -470,12 +470,17 @@ API principal:
 - `/api/network/graph`
 - `/api/network/best-route`
 - `/api/network/insights/history`
+- `/api/ml/retrain` (POST, trigger de reentreno)
+- `/api/ml/retrain/status` (GET, estado + recomendacion)
 - `/api/debug/sources` (diagnostico de fuentes activas y fallback)
 
 Motor de ruta:
 
-- Dijkstra en backend con perfiles (`balanced`, `fastest`, `resilient`).
-- Peso de arista considera distancia, delay promedio e impacto meteo.
+- Dijkstra en backend con perfiles:
+  - `balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`.
+- Peso de arista considera distancia, delay efectivo, congestion, meteo, incertidumbre y pesos multiobjetivo (`time/risk/eco`).
+- Soporta exclusiones de nodos (`avoid_nodes`) y modo temporal (`auto`, `peak`, `offpeak`, `night`).
+- Devuelve explicabilidad de ruta (`explain`) y metricas de fiabilidad (`on_time_probability`).
 
 Frontend:
 
@@ -486,6 +491,16 @@ Frontend:
 - filtros desacoplados por vista:
   - Tiempo Real: `Origen RT` / `Destino RT` (solo columna izquierda),
   - Red Logistica: `Origen` / `Destino` / `Perfil` (solo columna derecha).
+- selector de `Perfil` ampliado a 6 estrategias (`balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`).
+- controles de optimizacion multiobjetivo:
+  - `Peso tiempo`,
+  - `Peso riesgo`,
+  - `Peso eco`.
+- selector de `Patron horario` (`auto`, `peak`, `offpeak`, `night`) y panel `Evitar nodos`.
+- bloque de reentreno IA en cabecera:
+  - boton `Reentrenar IA`,
+  - estado runtime,
+  - recomendacion de reentreno con score de deriva y motivos.
 - comportamiento de filtros RT:
   - `TODOS->TODOS` vista global,
   - filtros parciales (`TODOS->X` o `X->TODOS`) soportados.
@@ -504,6 +519,8 @@ Script principal de arranque:
   - levanta stack,
   - espera NiFi,
   - ejecuta bootstrap NiFi (por defecto `kdd_ingestion_auto_v9`),
+  - asegura compatibilidad Hive streaming,
+  - repuebla meteo Hive si procede,
   - verifica dashboard.
 
 Reset de demo:
@@ -527,6 +544,20 @@ Validacion E2E batch+streaming:
 ./scripts/validate_hive_pipeline.sh
 ```
 
+Estado de reentreno IA (dashboard):
+
+```bash
+curl -s http://localhost:8501/api/ml/retrain/status
+```
+
+Trigger manual de reentreno IA:
+
+```bash
+curl -s -X POST http://localhost:8501/api/ml/retrain \
+  -H 'Content-Type: application/json' \
+  -d '{"trigger":"manual_dashboard"}'
+```
+
 Limpieza runs rojos historicos (healthchecks):
 
 ```bash
@@ -546,6 +577,8 @@ Limpieza de Process Groups legacy NiFi:
 3. Healthchecks Airflow con degradacion segura en smoke queries.
 4. Colas de error separadas en NiFi (`failure sinks` GPS/Clima).
 5. Separacion visual de flujos NiFi para diagnostico rapido.
+6. Reentreno IA no bloqueante en dashboard (worker asincrono + timeout configurable).
+7. Recomendacion de reentreno con histeresis y cooldown para evitar ejecuciones innecesarias.
 
 ## 14. Limitaciones conocidas
 

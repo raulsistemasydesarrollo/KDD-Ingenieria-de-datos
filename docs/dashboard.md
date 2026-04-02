@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Especificacion funcional del dashboard`
-- Version: `v1.1`
-- Fecha: `31/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Indice
 
@@ -14,11 +14,12 @@
 3. Que representa cada elemento visual
 4. Filtros de Tiempo Real (solo vista izquierda)
 5. Filtros de Analisis Logistico (solo vista derecha)
-6. Reglas de interpretacion de ruta por vehiculo
-7. ETA en panel de vehiculo
-8. Datos y nodos actuales
-9. Reinicio limpio de demo
-10. Nota de uso
+6. Reentreno IA (estado de modelo)
+7. Reglas de interpretacion de ruta por vehiculo
+8. ETA en panel de vehiculo
+9. Datos y nodos actuales
+10. Reinicio limpio de demo
+11. Nota de uso
 
 ## Objetivo
 
@@ -29,7 +30,7 @@ El dashboard muestra dos vistas operativas **desacopladas** (independientes), ma
 
 ## Captura actual
 
-![Dashboard logistica (21 vehiculos activos)](./dashboard.png)
+![Dashboard logistica (captura actualizada 02/04/2026)](./dashboard.png)
 
 ## Fuentes de datos del dashboard
 
@@ -54,6 +55,30 @@ Devuelve:
 - fuente activa de clima (`cassandra` o `nifi_raw_archive`) y estado Cassandra de clima,
 - estado/ficheros recientes de clima en fallback,
 - conteo de vertices/aristas del grafo.
+
+## Endpoints operativos del dashboard
+
+- `GET /api/overview`
+- `GET /api/vehicles/latest`
+- `GET /api/vehicles/history`
+- `GET /api/weather/latest`
+- `GET /api/network/graph`
+- `GET /api/network/insights/history`
+- `GET /api/network/best-route`
+- `GET /api/debug/sources`
+- `POST /api/ml/retrain`
+- `GET /api/ml/retrain/status`
+
+Parametros clave en `GET /api/network/best-route`:
+
+- `source`, `target`
+- `profile`
+- `alternatives`
+- `avoid_nodes` (CSV)
+- `temporal_mode` (`auto`, `peak`, `offpeak`, `night`)
+- `objective_time`
+- `objective_risk`
+- `objective_eco`
 
 ## Que representa cada elemento visual
 
@@ -105,6 +130,11 @@ Muestra:
 - Numero de aristas de la ruta con telemetria live usada en el calculo.
 - Nota: el contador `Aristas live` refleja solo tramos de la **ruta seleccionada** con muestras live (`live_sample_count > 0`), no el total del grafo.
 - Todas las tablas del dashboard son ordenables por columna (asc/desc) con click en cabecera.
+- La tabla de resumen de ruta incorpora ademas:
+  - `Objetivo (tiempo/riesgo/eco)` normalizado desde los sliders,
+  - `Patron horario aplicado` (`auto`, `peak`, `offpeak`, `night`),
+  - `Score riesgo`, `Score eco`, `Incertidumbre media`,
+  - `Prob. llegada en hora` y bloque `Explicacion IA`.
 
 ### Insights de red (live)
 
@@ -115,7 +145,7 @@ Bloque adicional en la vista de red con dos tablas:
 
 Filtros disponibles:
 
-- `Perfil insights`: recalcula score de impacto con los costes del perfil (`balanced`, `fastest`, `resilient`).
+- `Perfil insights`: recalcula score de impacto con los costes del perfil (`balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`).
 - `Congestion minima`: filtra el ranking para mostrar solo tramos/nodos afectados por el nivel indicado (`all`, `low`, `medium`, `high`).
 - `Historico insights`: tabla de snapshots recientes persistidos en Cassandra por perfil/congestion.
 - Si un tramo llega sin muestras live (`live_sample_count=0`) y congestion `UNKNOWN`, se normaliza a `low/medium/high` con heuristica de delay/distancia para mantener consistencia visual.
@@ -164,7 +194,44 @@ Reglas de negocio que aplica el script al regenerar aristas:
 - `Origen` y `Destino` afectan **solo** al bloque de Analisis de Red Logistica.
 - `TODOS` en alguno de los selectores pone el bloque en modo vista global (sin ruta concreta).
 - No se permite ruta concreta con mismo origen y destino.
-- `Calcular mejor ruta` aplica el perfil seleccionado (`balanced`, `fastest`, `resilient`) solo al bloque logistico.
+- `Calcular mejor ruta` aplica el perfil seleccionado solo al bloque logistico.
+- Perfiles de optimizacion disponibles:
+  - `balanced` (equilibrio general),
+  - `fastest` (prioriza tiempo),
+  - `resilient` (penaliza clima/congestion),
+  - `eco` (menor coste consumo/emisiones),
+  - `low_risk` (ETA estable, baja exposicion operativa),
+  - `reliable` (maximiza fiabilidad de ETA).
+- `Evitar nodos`: excluye nodos intermedios concretos del calculo.
+- `Patron horario`: aplica factor temporal por franja (`auto`, `peak`, `offpeak`, `night`).
+- Pesos de objetivo:
+  - `Peso tiempo`
+  - `Peso riesgo`
+  - `Peso eco`
+  Se normalizan y se envian al backend como `objective_time`, `objective_risk`, `objective_eco`.
+
+## Reentreno IA (estado de modelo)
+
+El dashboard incorpora operativa de reentreno en cabecera:
+
+- Boton `Reentrenar IA`.
+- Estado de ejecucion (`idle`, `running`, `done`, `error`) con duracion y timestamp de fin.
+- Panel de recomendacion de reentreno con score de deriva (`0-100`) y motivos explicativos.
+
+Endpoints asociados:
+
+- `POST /api/ml/retrain`:
+  - dispara reentreno asincrono (por defecto comando `docker exec spark-client /opt/spark-app/run-batch.sh`),
+  - devuelve `202 Accepted` si arranca o `409 Conflict` si ya hay uno en curso.
+- `GET /api/ml/retrain/status`:
+  - devuelve estado runtime del proceso,
+  - devuelve recomendacion cacheada de reentreno y metrica de deriva.
+
+Reglas operativas de recomendacion:
+
+- Histeresis con dos umbrales (`RETRAIN_RECOMMEND_ON_THRESHOLD`, `RETRAIN_RECOMMEND_OFF_THRESHOLD`).
+- Enfriamiento tras exito (`RETRAIN_COOLDOWN_HOURS`) para evitar reentrenos consecutivos.
+- Persistencia de estado y recomendacion en Cassandra (`transport.model_retrain_state`).
 
 ## Reglas de interpretacion de ruta por vehiculo
 

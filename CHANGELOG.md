@@ -33,6 +33,16 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   - 15 nodos (`ACO, ALM, BCN, BIO, CAC, GIJ, LIS, MAD, MAL, MUR, OPO, SEV, VAL, VLL, ZAR`),
   - 15 vehiculos (`14` activos y `1` en mantenimiento),
   - restricciones de conectividad por corredor y atajos prohibidos.
+- Actualizacion integral de documentacion de entrega a `v1.2` (`02/04/2026`) en los documentos principales de `docs/`.
+- Captura de dashboard renovada en `docs/dashboard.png` y leyenda sincronizada en documentacion funcional/tecnica.
+- `scripts/build_delivery_pdf.py` actualizado para incluir `docs/release-notes-2026-04-02.md`.
+- `scripts/build_delivery_pdf_professional.sh` preparado para salida PDF con fecha dinamica.
+- Dashboard de rutas ampliado con nuevos perfiles `low_risk` y `reliable` (ademas de `balanced`, `fastest`, `resilient`, `eco`).
+- Dashboard actualizado con optimizacion multiobjetivo (`objective_time`, `objective_risk`, `objective_eco`), `temporal_mode` y exclusion de nodos (`avoid_nodes`).
+- Nuevos endpoints ML operativos en dashboard:
+  - `POST /api/ml/retrain`
+  - `GET /api/ml/retrain/status`
+- Persistencia del estado/recomendacion de reentreno en Cassandra (`transport.model_retrain_state`).
 
 ### Fixed
 
@@ -75,6 +85,6 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - Normalizacion de enlaces en `docs/CODE-ANNOTATION-GUIDE.md` a rutas relativas.
 - Actualizacion de:
   - `docs/dashboard.md` (logica ETA y estabilidad),
-  - `docs/release-notes-2026-03-30.md`,
+  - `docs/release-notes-2026-04-02.md`,
   - `docs/operations.md` (troubleshooting ETA y Hive meteo),
   - `README.md` (operacion consolidada).

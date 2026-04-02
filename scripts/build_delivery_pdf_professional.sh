@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_PDF="/data/docs/entrega-unificada-profesional-2026-03-31.pdf"
+TODAY="$(date +%F)"
+OUT_PDF="/data/docs/entrega-unificada-profesional-${TODAY}.pdf"
+RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-release-notes-2026-04-02.md}"
 
 cd "${ROOT_DIR}/docs"
 
@@ -19,7 +21,7 @@ docker run --rm \
   dashboard.md \
   operations.md \
   architecture.md \
-  release-notes-2026-03-30.md \
+  "${RELEASE_NOTES_FILE}" \
   ../README.md \
   ../CHANGELOG.md \
   --from markdown+raw_tex \

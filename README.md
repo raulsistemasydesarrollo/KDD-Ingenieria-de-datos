@@ -107,6 +107,16 @@ Indice maestro de entrega:
    - Vista Analisis Logistico (derecha): usa `Origen` / `Destino` y afecta solo mapa/logistica/tablas de esa columna.
    - Ambas vistas estan desacopladas intencionalmente.
 
+   Capacidades actuales de routing/analitica en dashboard:
+   - Perfiles: `balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`.
+   - Multiobjetivo: pesos `tiempo/riesgo/eco` (normalizados).
+   - Patron horario: `auto`, `peak`, `offpeak`, `night`.
+   - Exclusiones de nodo: `Evitar nodos`.
+   - Candidatas de ruta: hasta 4 alternativas con `delta_vs_best`.
+   - Reentreno IA:
+     - trigger `POST /api/ml/retrain`
+     - estado/recomendacion `GET /api/ml/retrain/status`
+
 ## Scripts operativos
 
 - Arranque completo del stack:
@@ -310,6 +320,25 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 ./scripts/cleanup_nifi_legacy_pgs.py
 ```
 
+## Cambios recientes (02/04/2026)
+
+- Entrega documental v1.2 sincronizada en todos los documentos principales de `docs/`:
+  - portada, version y fecha de entrega alineadas a `02/04/2026`.
+- Captura del dashboard actualizada y referenciada en documentacion:
+  - `docs/dashboard.png`,
+  - `docs/dashboard.md`,
+  - `docs/memoria-tecnica-sistema.md`.
+- Nuevo documento de release notes para la iteracion actual:
+  - `docs/release-notes-2026-04-02.md`.
+- Estado funcional del dashboard alineado con codigo actual:
+  - perfiles adicionales `eco`, `low_risk`, `reliable`,
+  - patron horario y pesos `tiempo/riesgo/eco`,
+  - panel `Evitar nodos`,
+  - boton `Reentrenar IA` + recomendacion de deriva.
+- Builders de PDF de entrega ajustados a la iteracion activa:
+  - `scripts/build_delivery_pdf.py` apunta a release notes actual,
+  - `scripts/build_delivery_pdf_professional.sh` genera nombre de salida con fecha dinamica.
+
 ## Cambios recientes (31/03/2026)
 
 - Dashboard:
@@ -373,6 +402,6 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 - Guia de dashboard y leyenda visual: `docs/dashboard.md`.
 - Endpoint debug de fuentes del dashboard: `GET /api/debug/sources`.
 - Plan TODO de cumplimiento del enunciado por fases KDD: `docs/kdd-todo.md`.
-- Bitacora de cambios de la iteracion 30/03/2026: `docs/release-notes-2026-03-30.md`.
+- Bitacora de cambios de la iteracion 02/04/2026: `docs/release-notes-2026-04-02.md`.
 - Memoria tecnica detallada del sistema (entrega): `docs/memoria-tecnica-sistema.md`.
 - Resumen ejecutivo (1-2 paginas) para portada/anexo inicial: `docs/resumen-ejecutivo-memoria.md`.

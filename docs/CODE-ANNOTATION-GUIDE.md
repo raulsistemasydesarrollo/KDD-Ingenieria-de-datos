@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Mapa de comentarios tecnicos en codigo`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Objetivo
 
@@ -29,6 +29,8 @@ Bloques comentados:
 4. Estrategia de fuentes (Cassandra primario + fallback NiFi).
 5. Enriquecimiento de vehiculos con `planned_origin/planned_destination`.
 6. Router API (`/api/overview`, `/api/vehicles/latest`, `/api/network/best-route`, etc.).
+7. Operativa de reentreno IA (`/api/ml/retrain`, `/api/ml/retrain/status`) y cache/recomendacion.
+8. Persistencia de estado de reentreno en Cassandra (`model_retrain_state`).
 
 ## 2. Frontend Dashboard
 
@@ -45,6 +47,8 @@ Bloques comentados:
 5. Motor de render de marcadores y trazas.
 6. Recalculo de ruta para vista logistica.
 7. Registro de eventos (`bindEvents`) y secuencia de arranque (`bootstrap`).
+8. Panel de reentreno IA (`renderRetrainStatePanel`, `triggerRetrain`, `refreshRetrainStatus`).
+9. Optimizacion de ruta multiobjetivo (pesos `time/risk/eco`, `temporalMode`, `avoid_nodes`).
 
 ## 3. Spark (Batch + Streaming + ML)
 

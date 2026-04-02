@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Arquitectura tecnica actual`
-- Version: `v1.1`
-- Fecha: `31/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Indice
 
@@ -89,6 +89,15 @@ Archivo de imagen:
   - Fallback controlado a ficheros NiFi para vehiculos/clima.
   - Filtros desacoplados por vista.
   - Insights live de red y resumen de aristas con telemetria (`live_edge_summary`).
+  - Motor de rutas multiobjetivo con:
+    - 6 perfiles (`balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`),
+    - pesos `time/risk/eco`,
+    - patron temporal (`auto`, `peak`, `offpeak`, `night`),
+    - exclusion de nodos (`avoid_nodes`).
+  - Operativa ML integrada:
+    - trigger de reentreno (`/api/ml/retrain`),
+    - estado/recomendacion (`/api/ml/retrain/status`),
+    - persistencia de estado de recomendacion en Cassandra (`transport.model_retrain_state`).
 
 ## 4. Flujo de datos end-to-end
 

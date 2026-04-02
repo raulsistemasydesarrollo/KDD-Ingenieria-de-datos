@@ -24,7 +24,7 @@
   <rect x="0" y="0" width="1680" height="980" fill="#ffffff" />
 
   <text x="48" y="58" class="title">Arquitectura Proyecto Big Data KDD - Logistica</text>
-  <text x="48" y="86" class="subtitle">Estado final de entrega (30/03/2026) | Ingesta NiFi + Kafka | Spark batch/streaming | Hive/Cassandra | Dashboard desacoplado</text>
+  <text x="48" y="86" class="subtitle">Estado actualizado de entrega (02/04/2026) | Ingesta NiFi + Kafka | Spark batch/streaming | Hive/Cassandra | Dashboard desacoplado</text>
 
   <rect x="48" y="130" width="290" height="120" class="box ingest"/>
   <text x="68" y="162" class="label">gps-generator</text>

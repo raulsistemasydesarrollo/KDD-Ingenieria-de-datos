@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Guia de operaciones y troubleshooting`
-- Version: `v1.1`
-- Fecha: `31/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Indice
 
@@ -24,6 +24,7 @@
 13. Operacion del dashboard (estado final)
 14. Troubleshooting dashboard
 15. Sync de insights Cassandra -> Hive
+16. Reentreno IA del dashboard
 
 Este documento resume los comandos recomendados para operar el entorno y validar resultados.
 
@@ -85,7 +86,7 @@ DAG de bootstrap:
 
 - `kdd_bootstrap_stack`
 
-Este DAG arranca servicios no-Airflow del stack (`kafka`, `nifi`, `gps-generator`, `hadoop`, `raw-hdfs-loader`, `postgres-metastore`, `hive-metastore`, `cassandra`, `spark-client`) y muestra estado final.
+Este DAG arranca servicios no-Airflow del stack (`kafka`, `nifi`, `gps-generator`, `hadoop`, `raw-hdfs-loader`, `postgres-metastore`, `hive-metastore`, `cassandra`, `spark-client`, `dashboard`) y muestra estado final.
 
 Script recomendado (arranca Airflow y dispara el DAG):
 
@@ -260,7 +261,7 @@ docker compose exec -T cassandra cqlsh -e "SELECT weather_timestamp, warehouse_i
 Consultar snapshots de insights de red:
 
 ```bash
-docker compose exec -T cassandra cqlsh -e "SELECT bucket, profile, min_congestion, snapshot_time, top_edge_id, top_node_id, impact_score FROM transport.network_insights_snapshots LIMIT 20;"
+docker compose exec -T cassandra cqlsh -e "SELECT bucket, entity_type, profile, min_congestion, snapshot_time, rank, entity_id, impact_score, criticality_score FROM transport.network_insights_snapshots LIMIT 20;"
 ```
 
 ## Sync de insights Cassandra -> Hive
@@ -280,7 +281,7 @@ Validacion rapida:
 
 ```bash
 docker compose exec -T spark-client spark-sql -e "SELECT COUNT(*) AS c FROM transport_analytics.network_insights_snapshots_hive;"
-docker compose exec -T spark-client spark-sql -e "SELECT hour_bucket, profile, min_congestion, top_edge_id, top_node_id FROM transport_analytics.network_insights_hourly_trends ORDER BY hour_bucket DESC LIMIT 20;"
+docker compose exec -T spark-client spark-sql -e "SELECT snapshot_hour, profile, min_congestion, top_edge_id, top_node_id FROM transport_analytics.network_insights_hourly_trends ORDER BY snapshot_hour DESC LIMIT 20;"
 ```
 
 Si aparece error `permission denied` al ejecutar `run-insights-sync.sh`:
@@ -389,7 +390,7 @@ ORDER BY window_start_utc DESC
 LIMIT 10;
 ```
 
-## Bitacora operativa (actualizada 31/03/2026)
+## Bitacora operativa (actualizada 02/04/2026)
 
 Cambios aplicados:
 
@@ -421,6 +422,11 @@ Adicionalmente, en el estado actual:
 
 1. Los selectores de origen/destino en ambas vistas se cargan ordenados alfabeticamente.
 2. Todas las tablas del dashboard admiten ordenacion por columna.
+3. Perfiles de ruta disponibles: `balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`.
+4. Controles de optimizacion activos:
+   - pesos `tiempo/riesgo/eco`,
+   - `Patron horario` (`auto`, `peak`, `offpeak`, `night`),
+   - `Evitar nodos`.
 
 ### Reglas de filtro en Tiempo Real
 
@@ -493,3 +499,42 @@ docker compose restart dashboard
 
 Nota tecnica:
 - El calculo ETA ahora fuerza resincronizacion inmediata cuando hay cambio de destino estimado o desviacion grande entre ETA cacheado y ETA fisico (`distance/speed + delay`), evitando ETAs irreales persistentes.
+
+## Reentreno IA del dashboard
+
+El dashboard expone operativa de reentreno de modelo desde la cabecera.
+
+### Endpoints
+
+- Trigger manual:
+
+```bash
+curl -s -X POST http://localhost:8501/api/ml/retrain \
+  -H 'Content-Type: application/json' \
+  -d '{"trigger":"manual_dashboard"}'
+```
+
+- Estado + recomendacion:
+
+```bash
+curl -s http://localhost:8501/api/ml/retrain/status
+```
+
+### Variables de entorno relevantes
+
+- `RETRAIN_COMMAND` (por defecto: `docker exec spark-client /opt/spark-app/run-batch.sh`)
+- `RETRAIN_TIMEOUT_SECONDS`
+- `RETRAIN_RECOMMEND_THRESHOLD`
+- `RETRAIN_RECOMMEND_ON_THRESHOLD`
+- `RETRAIN_RECOMMEND_OFF_THRESHOLD`
+- `RETRAIN_COOLDOWN_HOURS`
+- `RETRAIN_STATUS_POLL_CACHE_SECONDS`
+- `CASSANDRA_RETRAIN_STATE_TABLE` (por defecto: `model_retrain_state`)
+
+### Persistencia Cassandra
+
+Tabla de estado de recomendacion/reentreno:
+
+```bash
+docker compose exec -T cassandra cqlsh -e "SELECT model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, updated_at FROM transport.model_retrain_state;"
+```

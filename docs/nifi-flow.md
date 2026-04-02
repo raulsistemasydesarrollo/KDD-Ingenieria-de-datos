@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Flujo NiFi operativo`
-- Version: `v1.0-entrega`
-- Fecha: `30/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## Objetivo
 

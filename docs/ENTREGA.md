@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Indice maestro de entrega`
-- Version: `v1.1`
-- Fecha: `31/03/2026`
+- Version: `v1.2`
+- Fecha: `02/04/2026`
 
 ## 1. Documentos principales
 
@@ -18,7 +18,7 @@
 4. Guia de operaciones y troubleshooting:
    - [docs/operations.md](./operations.md)
 5. Release notes de la iteracion:
-   - [docs/release-notes-2026-03-30.md](./release-notes-2026-03-30.md)
+   - [docs/release-notes-2026-04-02.md](./release-notes-2026-04-02.md)
 6. Guia general del repositorio:
    - [README.md](../README.md)
 7. Arquitectura tecnica + diagrama:
@@ -38,10 +38,19 @@
 3. Dashboard con dos vistas desacopladas:
    - Tiempo Real con filtros propios (`Origen RT`, `Destino RT`).
    - Red Logistica con filtros propios (`Origen`, `Destino`, `Perfil`).
-4. Rutas y proyecciones de vehiculo coherentes con plan de trayecto (`planned_origin`, `planned_destination`).
-5. Estado operativo con fuentes primarias en Cassandra y fallback controlado.
-6. Insights de red live con historico persistido en Cassandra y consolidacion en Hive.
-7. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
+4. Routing logistico multiobjetivo:
+   - perfiles `balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`,
+   - pesos `tiempo/riesgo/eco`,
+   - modo temporal (`auto`, `peak`, `offpeak`, `night`),
+   - exclusion de nodos intermedios.
+5. Rutas y proyecciones de vehiculo coherentes con plan de trayecto (`planned_origin`, `planned_destination`).
+6. Estado operativo con fuentes primarias en Cassandra y fallback controlado.
+7. Insights de red live con historico persistido en Cassandra y consolidacion en Hive.
+8. Operativa de reentreno IA en dashboard:
+   - `POST /api/ml/retrain`,
+   - `GET /api/ml/retrain/status`,
+   - estado persistido en `transport.model_retrain_state`.
+9. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
 
 ## 3. Checklist de revision previa a entrega
 
@@ -77,6 +86,11 @@
 - [ ] Etiquetas de nodo RT en formato 3 letras y semitransparentes.
 - [ ] Selectores origen/destino ordenados alfabeticamente.
 - [ ] Tablas del dashboard ordenables por columna.
+- [ ] Perfiles de ruta disponibles: `balanced`, `fastest`, `resilient`, `eco`, `low_risk`, `reliable`.
+- [ ] `Patron horario` y pesos `tiempo/riesgo/eco` afectan al calculo de ruta.
+- [ ] `Evitar nodos` modifica candidatas de ruta.
+- [ ] Boton `Reentrenar IA` operativo y estado visible.
+- [ ] Endpoint `GET /api/ml/retrain/status` devuelve `state` y `advice`.
 
 ### 3.4 Documentacion
 
@@ -98,7 +112,29 @@ Nota:
 
 - `start_kdd.sh` ya ejecuta validacion de compatibilidad Hive streaming y sanity check de vistas Madrid.
 
-## 5. Nota final
+## 5. Generacion de PDFs de entrega
+
+PDF unificado (texto plano consolidado):
+
+```bash
+python3 scripts/build_delivery_pdf.py
+```
+
+Salida esperada:
+
+- `docs/entrega-unificada-YYYY-MM-DD.pdf` (ej. `docs/entrega-unificada-2026-04-02.pdf`)
+
+PDF profesional (maquetado con `pandoc/latex`):
+
+```bash
+./scripts/build_delivery_pdf_professional.sh
+```
+
+Salida esperada:
+
+- `docs/entrega-unificada-profesional-YYYY-MM-DD.pdf` (ej. `docs/entrega-unificada-profesional-2026-04-02.pdf`)
+
+## 6. Nota final
 
 Si se realizan cambios de frontend antes de defensa/demo, usar recarga fuerte del navegador:
 
