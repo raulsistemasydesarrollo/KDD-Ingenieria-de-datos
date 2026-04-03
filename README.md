@@ -33,6 +33,7 @@ Repositorio GitHub oficial del proyecto:
 Indice maestro de entrega:
 
 - [docs/ENTREGA.md](./docs/ENTREGA.md)
+- [docs/manual-usuario.md](./docs/manual-usuario.md) (manual de usuario completo)
 - [docs/architecture.md](./docs/architecture.md) (incluye diagrama [docs/architecture-diagram.png](./docs/architecture-diagram.png))
 - [CHANGELOG.md](./CHANGELOG.md) (historial consolidado de cambios)
 
@@ -158,6 +159,47 @@ Indice maestro de entrega:
   ```bash
   ./scripts/reset_demo_data.sh --hard
   ```
+
+## Operacion diaria (checks, reinicios, BBDD y troubleshooting)
+
+Checks de salud rapidos:
+
+```bash
+docker compose ps
+curl -fsS http://localhost:8501/health
+curl -fsS http://localhost:8080/health
+docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list | sort
+```
+
+Reinicio de servicios frecuentes:
+
+```bash
+docker compose restart dashboard
+docker compose restart nifi
+docker compose restart spark-client
+```
+
+Consultas BBDD desde terminal:
+
+```bash
+docker compose exec -T spark-client spark-sql -e "SHOW TABLES IN transport_analytics;"
+docker compose exec -T spark-client spark-sql -e "SELECT COUNT(*) AS weather_rows FROM transport_analytics.v_weather_observations_madrid;"
+docker compose exec -T cassandra cqlsh -e "SELECT vehicle_id, warehouse_id, route_id, last_event_timestamp, delay_minutes, speed_kmh FROM transport.vehicle_latest_state LIMIT 20;"
+```
+
+Acciones de recuperacion tipicas:
+
+```bash
+./scripts/ensure_hive_streaming_compat.sh
+./scripts/repopulate_hive_weather_from_cassandra.sh
+./scripts/reset_streaming_state.sh
+./scripts/cleanup_airflow_failed_runs.sh --apply
+./scripts/bootstrap_nifi_flow.sh
+```
+
+Guia operativa completa:
+
+- `docs/operations.md`
 
 ## Validacion automatica Hive
 
@@ -324,16 +366,16 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 ./scripts/cleanup_nifi_legacy_pgs.py
 ```
 
-## Cambios recientes (02/04/2026)
+## Cambios recientes (03/04/2026)
 
-- Entrega documental v1.2 sincronizada en todos los documentos principales de `docs/`:
-  - portada, version y fecha de entrega alineadas a `02/04/2026`.
+- Entrega documental v1.3 sincronizada en todos los documentos principales de `docs/`:
+  - portada, version y fecha de entrega alineadas a `03/04/2026`.
 - Captura del dashboard actualizada y referenciada en documentacion:
   - `docs/dashboard.png`,
   - `docs/dashboard.md`,
   - `docs/memoria-tecnica-sistema.md`.
 - Nuevo documento de release notes para la iteracion actual:
-  - `docs/release-notes-2026-04-02.md`.
+  - `docs/release-notes-2026-04-03.md`.
 - Estado funcional del dashboard alineado con codigo actual:
   - perfiles adicionales `eco`, `low_risk`, `reliable`,
   - patron horario y pesos `tiempo/riesgo/eco`,
@@ -419,6 +461,6 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 - Guia de dashboard y leyenda visual: `docs/dashboard.md`.
 - Endpoint debug de fuentes del dashboard: `GET /api/debug/sources`.
 - Plan TODO de cumplimiento del enunciado por fases KDD: `docs/kdd-todo.md`.
-- Bitacora de cambios de la iteracion 02/04/2026: `docs/release-notes-2026-04-02.md`.
+- Bitacora de cambios de la iteracion 03/04/2026: `docs/release-notes-2026-04-03.md`.
 - Memoria tecnica detallada del sistema (entrega): `docs/memoria-tecnica-sistema.md`.
 - Resumen ejecutivo (1-2 paginas) para portada/anexo inicial: `docs/resumen-ejecutivo-memoria.md`.

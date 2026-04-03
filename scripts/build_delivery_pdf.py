@@ -15,8 +15,9 @@ DOCS = [
     ROOT / "docs" / "nifi-flow.md",
     ROOT / "docs" / "dashboard.md",
     ROOT / "docs" / "operations.md",
+    ROOT / "docs" / "manual-usuario.md",
     ROOT / "docs" / "architecture.md",
-    ROOT / "docs" / "release-notes-2026-04-02.md",
+    ROOT / "docs" / "release-notes-2026-04-03.md",
     ROOT / "README.md",
     ROOT / "CHANGELOG.md",
 ]

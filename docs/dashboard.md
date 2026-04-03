@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Especificacion funcional del dashboard`
-- Version: `v1.2`
-- Fecha: `02/04/2026`
+- Version: `v1.3`
+- Fecha: `03/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -29,9 +29,13 @@ El dashboard muestra dos vistas operativas **desacopladas** (independientes), ma
 - Operacion en tiempo real de vehiculos (mapa y paneles de flota).
 - Analisis de red logistica (mapa de red y tablas de rutas/impacto).
 
+Manual de usuario completo del sistema (incluye dashboard + Airflow + operacion):
+
+- `docs/manual-usuario.md`
+
 ## Captura actual
 
-![Dashboard logistica (captura actualizada 02/04/2026)](./dashboard.png)
+![Dashboard logistica (captura actualizada 03/04/2026)](./dashboard.png)
 
 ## Fuentes de datos del dashboard
 

@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Memoria tecnica del sistema`
-- Version: `v1.2`
-- Fecha: `02/04/2026`
+- Version: `v1.3`
+- Fecha: `03/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -371,7 +371,7 @@ Fallback heuristico (si dataset pequeno):
 
 - regla por `speed_kmh` para `predicted_delay_minutes`.
 
-Resultado validado en la iteracion `02/04/2026` (dataset semilla 20k):
+Resultado validado en la iteracion `03/04/2026` (dataset semilla 20k):
 
 - `baseline_rmse=6.1329`
 - `tuned_baseline_rmse=6.1343`
@@ -463,7 +463,7 @@ Alertas:
 
 Captura de estado operativo del dashboard:
 
-![Dashboard logistica (captura actualizada 02/04/2026)](./dashboard.png)
+![Dashboard logistica (captura actualizada 03/04/2026)](./dashboard.png)
 
 Backend:
 

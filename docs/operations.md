@@ -4,30 +4,35 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Guia de operaciones y troubleshooting`
-- Version: `v1.2`
-- Fecha: `02/04/2026`
+- Version: `v1.3`
+- Fecha: `03/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
 
 1. Arranque y parada
-2. Healthcheck en Airflow
-3. Arranque del stack desde Airflow
-4. Flujo NiFi
-5. Validaciones
-6. Politica de almacenamiento
-7. Matriz operativa end-to-end
-8. Limpieza de estado streaming
-9. Limpieza de historico failed en Airflow
-10. Zona horaria
-11. Vistas Hive en hora Madrid
-12. Bitacora operativa
-13. Operacion del dashboard (estado final)
-14. Troubleshooting dashboard
-15. Sync de insights Cassandra -> Hive
-16. Reentreno IA del dashboard
+2. Comandos operativos rapidos (scripts clave)
+3. Healthcheck en Airflow
+4. Arranque del stack desde Airflow
+5. Flujo NiFi
+6. Validaciones
+7. Politica de almacenamiento
+8. Matriz operativa end-to-end
+9. Limpieza de estado streaming
+10. Limpieza de historico failed en Airflow
+11. Zona horaria
+12. Vistas Hive en hora Madrid
+13. Bitacora operativa
+14. Operacion del dashboard (estado final)
+15. Troubleshooting dashboard
+16. Sync de insights Cassandra -> Hive
+17. Reentreno IA del dashboard
 
 Este documento resume los comandos recomendados para operar el entorno y validar resultados.
+
+Manual de usuario integral relacionado:
+
+- `docs/manual-usuario.md`
 
 ## Arranque y parada
 
@@ -48,6 +53,137 @@ Parar todo el stack:
 
 ```bash
 ./scripts/stop_kdd.sh
+```
+
+## Comandos operativos rapidos (scripts clave)
+
+### Reinicio completo o parcial de servicios
+
+Reinicio completo (recomendado para demos):
+
+```bash
+./scripts/stop_kdd.sh
+./scripts/start_kdd.sh
+```
+
+Reinicio de servicio puntual:
+
+```bash
+docker compose restart dashboard
+docker compose restart nifi
+docker compose restart spark-client
+```
+
+Recrear servicio con nueva imagen/config:
+
+```bash
+sg docker -c "docker compose up -d --build --force-recreate dashboard"
+```
+
+### Checks de salud de la plataforma
+
+Health HTTP de dashboard:
+
+```bash
+curl -fsS http://localhost:8501/health
+```
+
+Estado general de contenedores:
+
+```bash
+docker compose ps
+```
+
+Healthcheck Airflow (API interna):
+
+```bash
+curl -fsS http://localhost:8080/health
+```
+
+Estado de topics Kafka:
+
+```bash
+docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list | sort
+```
+
+Comprobacion de rutas HDFS:
+
+```bash
+docker compose exec -T hadoop hdfs dfs -ls -R /data/raw/nifi | tail -n 40
+docker compose exec -T hadoop hdfs dfs -ls -R /data/curated | tail -n 60
+```
+
+### Comprobaciones y validaciones por script
+
+Validacion E2E de Hive (batch + streaming):
+
+```bash
+./scripts/validate_hive_pipeline.sh
+```
+
+Validacion de parseo meteo (number/string -> double):
+
+```bash
+./scripts/validate_weather_parsing_fix.sh
+```
+
+Reparacion idempotente de objetos streaming en Hive:
+
+```bash
+./scripts/ensure_hive_streaming_compat.sh
+```
+
+Repoblado meteo en Hive desde Cassandra:
+
+```bash
+./scripts/repopulate_hive_weather_from_cassandra.sh
+```
+
+### Consultas BBDD (Hive y Cassandra)
+
+Hive: tablas y recuentos clave:
+
+```bash
+docker compose exec -T spark-client spark-sql -e "SHOW TABLES IN transport_analytics;"
+docker compose exec -T spark-client spark-sql -e "SELECT COUNT(*) AS delay_rows FROM transport_analytics.v_delay_metrics_streaming_madrid;"
+docker compose exec -T spark-client spark-sql -e "SELECT COUNT(*) AS weather_rows FROM transport_analytics.v_weather_observations_madrid;"
+```
+
+Cassandra: estado de flota, meteo e insights:
+
+```bash
+docker compose exec -T cassandra cqlsh -e "SELECT vehicle_id, warehouse_id, route_id, last_event_timestamp, delay_minutes, speed_kmh FROM transport.vehicle_latest_state LIMIT 20;"
+docker compose exec -T cassandra cqlsh -e "SELECT bucket, weather_timestamp, weather_event_id, warehouse_id, temperature_c, precipitation_mm, wind_kmh FROM transport.weather_observations_recent WHERE bucket='all' LIMIT 20;"
+docker compose exec -T cassandra cqlsh -e "SELECT bucket, entity_type, profile, min_congestion, snapshot_time, rank, entity_id, impact_score, criticality_score FROM transport.network_insights_snapshots LIMIT 20;"
+```
+
+### Troubleshooting rapido
+
+Limpiar estado streaming (tablas + checkpoints) y recomponer vistas:
+
+```bash
+./scripts/reset_streaming_state.sh
+```
+
+Reset de demo (soft / hard):
+
+```bash
+./scripts/reset_demo_data.sh
+./scripts/reset_demo_data.sh --hard
+```
+
+Limpieza de runs `failed` en Airflow:
+
+```bash
+./scripts/cleanup_airflow_failed_runs.sh
+./scripts/cleanup_airflow_failed_runs.sh --apply
+```
+
+Reconstruir flujo NiFi y limpiar PGs legacy:
+
+```bash
+./scripts/bootstrap_nifi_flow.sh
+./scripts/cleanup_nifi_legacy_pgs.py
 ```
 
 ## Healthcheck en Airflow
@@ -314,11 +450,11 @@ sg docker -c "docker compose exec -T spark-client bash /opt/spark-app/run-batch.
 sg docker -c "docker compose exec -T hadoop hdfs dfs -du -h /models/delay_risk_rf"
 ```
 
-Salida esperada (iteracion 02/04/2026):
+Salida esperada (iteracion 03/04/2026):
 
 - linea en logs con comparativa:
   - `INFO: ML A/B delay risk => baseline_rmse=... | tuned_baseline_rmse=... | enhanced_rmse=... | selected=...`
-- modelo persistido en `hdfs://hadoop:9000/models/delay_risk_rf` con tamano ~`1.2 MB` (estado validado 02/04/2026).
+- modelo persistido en `hdfs://hadoop:9000/models/delay_risk_rf` con tamano ~`1.2 MB` (estado validado 03/04/2026).
 
 Checklist de comprobacion rapida:
 
@@ -404,7 +540,7 @@ ORDER BY window_start_utc DESC
 LIMIT 10;
 ```
 
-## Bitacora operativa (actualizada 02/04/2026)
+## Bitacora operativa (actualizada 03/04/2026)
 
 Cambios aplicados:
 

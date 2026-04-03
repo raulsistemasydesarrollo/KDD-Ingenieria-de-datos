@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Resumen ejecutivo para memoria`
-- Version: `v1.2`
-- Fecha: `02/04/2026`
+- Version: `v1.3`
+- Fecha: `03/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -129,7 +129,7 @@ Se han dejado documentos para operacion y defensa:
 3. Dashboard y leyenda funcional:
    - `docs/dashboard.md`
 4. Release notes de iteracion:
-   - `docs/release-notes-2026-04-02.md`
+   - `docs/release-notes-2026-04-03.md`
 
 ## 7. Conclusiones
 

@@ -291,7 +291,6 @@ async function fetchJson(url, options = {}) {
 }
 
 function tileLayerUrl(theme) {
-  if (theme === "light") return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
   return "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 }
 
@@ -319,11 +318,9 @@ function applyMapTheme() {
 }
 
 function applyTheme(theme) {
-  state.theme = theme === "light" ? "light" : "dark";
+  state.theme = "dark";
   document.body.setAttribute("data-theme", state.theme);
-  localStorage.setItem("dashboard_theme", state.theme);
-  const btn = document.getElementById("theme-btn");
-  if (btn) btn.textContent = state.theme === "dark" ? "Modo claro" : "Modo oscuro";
+  localStorage.setItem("dashboard_theme", "dark");
   applyMapTheme();
   if (state.graph) {
     renderAllRoutesTable(state.graph, state.route);
@@ -332,7 +329,7 @@ function applyTheme(theme) {
 }
 
 function initTheme() {
-  applyTheme(localStorage.getItem("dashboard_theme") || "dark");
+  applyTheme("dark");
 }
 
 function severityClass(delay) {
@@ -1305,13 +1302,25 @@ function renderRetrainStatePanel() {
     const score = Number(advice.score || 0);
     const threshold = Number(advice.threshold || 55);
     const reasonsList = Array.isArray(advice.reasons) ? advice.reasons.slice(0, 3) : [];
-    const reasonsText = reasonsList.length
-      ? reasonsList.map((r, idx) => `${idx + 1}) ${r}`).join(" ")
+    const reasonsHtml = reasonsList.length
+      ? reasonsList
+        .map((r, idx) => {
+          const safeReason = String(r || "").replace(
+            /\(([^)]*%[^)]*)\)/g,
+            `<span class="advice-nowrap">($1)</span>`
+          );
+          return `<span class="advice-reason">${idx + 1}) ${safeReason}</span>`;
+        })
+        .join("")
       : "Sin razones disponibles.";
     if (recommended) {
-      adviceEl.textContent = `Reentreno recomendado AHORA: score ${score}/100 (umbral ${threshold}). Este score mide riesgo de deriva del modelo (0-100): mas alto = mas probable que convenga reentrenar. Motivos: ${reasonsText}`;
+      adviceEl.innerHTML =
+        `<span class="advice-head">Reentreno recomendado AHORA: score ${score}/100 (umbral ${threshold}). Este score mide riesgo de deriva del modelo (0-100): mas alto = mas probable que convenga reentrenar. Motivos:</span>` +
+        `<span class="advice-body">${reasonsHtml}</span>`;
     } else {
-      adviceEl.textContent = `Reentreno NO recomendado ahora: score ${score}/100 (umbral ${threshold}). Este score mide riesgo de deriva del modelo (0-100): mas alto = mas probable que convenga reentrenar. El modelo se considera estable. ${reasonsText}`;
+      adviceEl.innerHTML =
+        `<span class="advice-head"><strong>Reentreno NO recomendado ahora</strong>: score ${score}/100 (umbral ${threshold}). Este score mide riesgo de deriva del modelo (0-100): mas alto = mas probable que convenga reentrenar. <strong>El modelo se considera estable</strong>.</span>` +
+        `<span class="advice-body">${reasonsHtml}</span>`;
     }
     adviceEl.classList.remove("bad", "recommended", "stable");
     adviceEl.classList.add(recommended ? "recommended" : "stable");
@@ -1326,23 +1335,18 @@ function renderRetrainStatePanel() {
     ];
     const candidateMeta = candidates.length ? candidates : defaultCandidates;
     const candidateNames = candidateMeta.map((c) => c.name);
-    const letters = ["A", "B", "C", "D", "E"];
     const selectedName = selected?.selected_name ? String(selected.selected_name) : "";
-    const selectedIdx = candidateNames.findIndex((n) => n === selectedName);
-    const selectedLabel = selectedIdx >= 0 ? `${letters[selectedIdx] || selectedIdx + 1}:${selectedName}` : selectedName;
-    const candidatesHtml = candidateNames
+    const candidatesPills = candidateNames
       .map((name, idx) => {
         const desc = candidateMeta[idx]?.description || "";
-        const label = `${letters[idx] || idx + 1}:${name}`;
-        return (
-        name === selectedName
-          ? `<span class="model-pill active" title="${desc}">${label} (en uso)</span>`
-          : `<span class="model-pill" title="${desc}">${label}</span>`
-        );
+        if (name === selectedName) {
+          return `<span class="model-pill active" title="${desc}">${name} (en uso)</span>`;
+        }
+        return `<span class="model-pill" title="${desc}">${name}</span>`;
       })
       .join(" ");
     const criteriaHtml = candidateMeta
-      .map((c, idx) => `<span class="model-criterion-item"><strong>${letters[idx] || idx + 1}. ${c.name}</strong>: ${c.description || "-"}</span>`)
+      .map((c) => `<span class="model-criterion-item"><strong>${c.name}</strong>: ${c.description || "-"}</span>`)
       .join(" ");
     if (selected?.selected_name) {
       const rmseBits = selected.rmses
@@ -1352,8 +1356,7 @@ function renderRetrainStatePanel() {
         modelActiveEl.innerHTML =
         `<span class="model-used active-used">EN USO: ${selected.selected_name}` +
         `${Number.isFinite(selected.selected_rmse) ? ` (RMSE ${fmt.n(selected.selected_rmse, 4)})` : ""}</span>. ` +
-        `<div class="model-chosen-line">CANDIDATO ELEGIDO: ${selectedLabel}</div>` +
-        `<div class="model-candidates">Candidatos: ${candidatesHtml}</div> ` +
+        `<div class="model-candidates model-candidates-inline">Candidatos: ${candidatesPills}</div> ` +
         `${selected.reason || modelInfo.criterion || "Criterio: menor RMSE en test."}` +
         `${rmseBits ? ` Comparativa RMSE: ${rmseBits}.` : ""}`;
       }
@@ -1366,7 +1369,7 @@ function renderRetrainStatePanel() {
       if (modelActiveEl) {
         modelActiveEl.innerHTML =
         `<span class="model-used active-used">EN USO: ${modelInfo.artifact_name || "delay_risk_rf"}</span>. ` +
-        `<div class="model-candidates">Candidatos: ${candidatesHtml}</div> ` +
+        `<div class="model-candidates model-candidates-inline">Candidatos: ${candidatesPills}</div> ` +
         `Criterio de seleccion: ${modelInfo.criterion || "menor RMSE en test"}. ` +
         `Ultimo ganador no disponible; se mostrara tras el proximo reentreno.`;
       }
@@ -2304,10 +2307,6 @@ function bindEvents() {
   document.getElementById("play-btn").addEventListener("click", () => {
     state.playback = !state.playback;
     document.getElementById("play-btn").textContent = state.playback ? "Pausar animacion" : "Reanudar animacion";
-  });
-  document.getElementById("theme-btn").addEventListener("click", () => {
-    applyTheme(state.theme === "dark" ? "light" : "dark");
-    applyAllTableSortStates();
   });
 }
 

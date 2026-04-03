@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TODAY="$(date +%F)"
 OUT_PDF="/data/docs/entrega-unificada-profesional-${TODAY}.pdf"
-RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-release-notes-2026-04-02.md}"
+RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-release-notes-2026-04-03.md}"
 
 cd "${ROOT_DIR}/docs"
 
@@ -20,6 +20,7 @@ docker run --rm \
   nifi-flow.md \
   dashboard.md \
   operations.md \
+  manual-usuario.md \
   architecture.md \
   "${RELEASE_NOTES_FILE}" \
   ../README.md \

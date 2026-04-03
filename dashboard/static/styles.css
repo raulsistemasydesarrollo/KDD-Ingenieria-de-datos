@@ -64,7 +64,7 @@ header {
   flex-direction: column;
   align-items: flex-end;
   gap: 0.35rem;
-  min-width: 380px;
+  min-width: 440px;
 }
 
 h1 {
@@ -144,23 +144,47 @@ body[data-theme="light"] .source-badge.source-unknown {
   justify-content: flex-end;
   gap: 0.5rem;
   flex-wrap: nowrap;
+  width: 100%;
 }
 
 .model-panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.4rem;
-  min-width: 540px;
-  max-width: 860px;
+  min-width: 620px;
+  max-width: 980px;
   flex: 1 1 auto;
 }
 
 .model-advice {
   font-size: 0.8rem;
   color: var(--muted);
-  max-width: 520px;
-  text-align: right;
+  width: 100%;
+  max-width: 980px;
+  align-self: stretch;
+  text-align: left;
   line-height: 1.35;
+}
+
+.model-advice .advice-head {
+  display: block;
+  white-space: nowrap;
+}
+
+.model-advice .advice-body {
+  display: block;
+  margin-top: 0.12rem;
+  white-space: normal;
+  overflow: visible;
+}
+
+.model-advice .advice-nowrap {
+  white-space: nowrap;
+}
+
+.model-advice .advice-reason {
+  display: block;
+  white-space: nowrap;
 }
 
 .model-summary {
@@ -195,6 +219,13 @@ body[data-theme="light"] .source-badge.source-unknown {
 
 .model-summary .model-candidates {
   color: var(--muted);
+}
+
+.model-candidates-inline {
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: block;
 }
 
 .model-pill {

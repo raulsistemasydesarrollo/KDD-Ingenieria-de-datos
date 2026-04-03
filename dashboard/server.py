@@ -89,12 +89,44 @@ _RETRAIN_STATE = {
     "model_selection": None,
 }
 _RETRAIN_ADVICE_CACHE = {"computed_at": None, "payload": None}
+STATIC_DATA_CACHE_TTL_SECONDS = int(os.getenv("STATIC_DATA_CACHE_TTL_SECONDS", "20"))
+_STATIC_DATA_CACHE = {}
+_STATIC_DATA_CACHE_LOCK = threading.Lock()
 
 MODEL_CANDIDATES = [
     {"name": "baseline_rf", "description": "Base: variables operativas esenciales (velocidad/tipo/almacen)."},
     {"name": "tuned_baseline_rf", "description": "Baseline con hiperparametros ajustados para mejorar generalizacion."},
     {"name": "enhanced_rf", "description": "Enriquecido con clima y congestion alineados temporalmente (15 min)."},
 ]
+
+
+def _path_mtime_ns(path: Path):
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return -1
+
+
+def _get_cached_static_data(cache_key: str, paths, loader):
+    now = time.time()
+    mtimes = tuple(_path_mtime_ns(path) for path in paths)
+    with _STATIC_DATA_CACHE_LOCK:
+        cached = _STATIC_DATA_CACHE.get(cache_key)
+        if (
+            cached
+            and cached.get("mtimes") == mtimes
+            and (now - float(cached.get("loaded_at") or 0.0)) <= STATIC_DATA_CACHE_TTL_SECONDS
+        ):
+            return cached.get("value")
+
+    value = loader()
+    with _STATIC_DATA_CACHE_LOCK:
+        _STATIC_DATA_CACHE[cache_key] = {
+            "mtimes": mtimes,
+            "loaded_at": now,
+            "value": value,
+        }
+    return value
 
 
 def invalidate_retrain_advice_cache():
@@ -596,6 +628,8 @@ def _compute_retrain_advice_payload():
     vertices, edges = load_route_graph()
     warehouse_aliases = build_warehouse_aliases(vertices)
     latest_rows, _source, _meta = load_vehicle_latest_preferred(events, warehouse_aliases, limit=200)
+    vehicle_plans = load_vehicle_path_plans(warehouse_aliases)
+    attach_vehicle_plans(latest_rows, vehicle_plans)
     overview = build_overview_from_latest_vehicle_state(latest_rows, weather_rows)
     _edges_with_live, live_edge_summary = apply_live_edge_telemetry(edges, latest_rows)
 
@@ -609,7 +643,8 @@ def _compute_retrain_advice_payload():
         age_minutes = (now_utc() - latest_event).total_seconds() / 60.0
     vehicles_considered = int(live_edge_summary.get("vehicles_considered") or 0)
     edges_with_live_samples = int(live_edge_summary.get("edges_with_live_samples") or 0)
-    live_coverage_ratio = 0.0 if not edges else edges_with_live_samples / max(1, len(edges))
+    total_edges = max(1, len(edges))
+    live_coverage_ratio = 0.0 if not edges else edges_with_live_samples / total_edges
 
     persisted = load_persisted_retrain_state()
     last_success = parse_iso_utc(persisted.get("last_success_at")) if persisted.get("last_success_at") else None
@@ -640,10 +675,16 @@ def _compute_retrain_advice_payload():
 
     if live_coverage_ratio < 0.32:
         score += 15
-        reasons.append(f"Baja cobertura live en aristas ({round(live_coverage_ratio * 100, 1)}%).")
+        reasons.append(
+            f"Baja cobertura live en aristas ({edges_with_live_samples}/{total_edges}, "
+            f"{round(live_coverage_ratio * 100, 1)}%; porcentaje de aristas del grafo con muestra live reciente)."
+        )
     elif live_coverage_ratio < 0.5:
         score += 7
-        reasons.append(f"Cobertura live mejorable ({round(live_coverage_ratio * 100, 1)}%).")
+        reasons.append(
+            f"Cobertura live mejorable ({edges_with_live_samples}/{total_edges}, "
+            f"{round(live_coverage_ratio * 100, 1)}%; porcentaje de aristas del grafo con muestra live reciente)."
+        )
 
     if age_minutes is not None and age_minutes > 180:
         score += 9
@@ -694,6 +735,8 @@ def _compute_retrain_advice_payload():
             "weather_factor": round(weather_factor, 3),
             "live_coverage_ratio": round(live_coverage_ratio, 3),
             "vehicles_considered": vehicles_considered,
+            "edges_with_live_samples": edges_with_live_samples,
+            "total_edges": len(edges),
             "latest_event_age_minutes": round(age_minutes, 1) if age_minutes is not None else None,
         },
     }
@@ -928,42 +971,49 @@ def weather_impact_level(weather_factor: float):
 
 
 def load_route_graph():
-    vertices = []
-    edges = []
+    def _load():
+        vertices = []
+        edges = []
 
-    if GRAPH_VERTICES_PATH.exists():
-        with GRAPH_VERTICES_PATH.open("r", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                vertices.append(
-                    {
-                        "id": row.get("id"),
-                        "name": row.get("name"),
-                        "type": row.get("type"),
-                        "criticality": row.get("criticality", "unknown"),
-                    }
-                )
+        if GRAPH_VERTICES_PATH.exists():
+            with GRAPH_VERTICES_PATH.open("r", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    vertices.append(
+                        {
+                            "id": row.get("id"),
+                            "name": row.get("name"),
+                            "type": row.get("type"),
+                            "criticality": row.get("criticality", "unknown"),
+                        }
+                    )
 
-    if GRAPH_EDGES_PATH.exists():
-        with GRAPH_EDGES_PATH.open("r", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                try:
-                    distance_km = float(row.get("distance_km") or 0)
-                    avg_delay = float(row.get("avg_delay_minutes") or 0)
-                except ValueError:
-                    continue
+        if GRAPH_EDGES_PATH.exists():
+            with GRAPH_EDGES_PATH.open("r", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    try:
+                        distance_km = float(row.get("distance_km") or 0)
+                        avg_delay = float(row.get("avg_delay_minutes") or 0)
+                    except ValueError:
+                        continue
 
-                edges.append(
-                    {
-                        "src": row.get("src"),
-                        "dst": row.get("dst"),
-                        "distance_km": distance_km,
-                        "avg_delay_minutes": avg_delay,
-                    }
-                )
+                    edges.append(
+                        {
+                            "src": row.get("src"),
+                            "dst": row.get("dst"),
+                            "distance_km": distance_km,
+                            "avg_delay_minutes": avg_delay,
+                        }
+                    )
 
-    return vertices, edges
+        return vertices, edges
+
+    return _get_cached_static_data(
+        "route_graph",
+        [GRAPH_VERTICES_PATH, GRAPH_EDGES_PATH],
+        _load,
+    )
 
 
 def build_warehouse_aliases(vertices):
@@ -982,38 +1032,36 @@ def normalize_warehouse_id(raw_warehouse_id, aliases):
 
 def load_allowed_vehicle_ids():
     # IDs de flota validos para UI (activos + mantenimiento) para evitar legacy.
-    ids = set()
-    if not MASTER_VEHICLES_PATH.exists():
-        return ids
-    try:
-        with MASTER_VEHICLES_PATH.open("r", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                vid = str(row.get("vehicle_id") or "").strip()
-                if not vid:
-                    continue
-                ids.add(vid)
-    except OSError:
-        return set()
-    return ids
+    ids, _status_map = _load_vehicle_master_cache()
+    return set(ids)
 
 
 def load_vehicle_status_map():
-    status_map = {}
-    if not MASTER_VEHICLES_PATH.exists():
-        return status_map
-    try:
-        with MASTER_VEHICLES_PATH.open("r", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                vid = str(row.get("vehicle_id") or "").strip()
-                status = str(row.get("status") or "").strip().lower() or "unknown"
-                if not vid:
-                    continue
-                status_map[vid] = status
-    except OSError:
-        return {}
-    return status_map
+    _ids, status_map = _load_vehicle_master_cache()
+    return dict(status_map)
+
+
+def _load_vehicle_master_cache():
+    def _load():
+        ids = set()
+        status_map = {}
+        if not MASTER_VEHICLES_PATH.exists():
+            return ids, status_map
+        try:
+            with MASTER_VEHICLES_PATH.open("r", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    vid = str(row.get("vehicle_id") or "").strip()
+                    status = str(row.get("status") or "").strip().lower() or "unknown"
+                    if not vid:
+                        continue
+                    ids.add(vid)
+                    status_map[vid] = status
+        except OSError:
+            return set(), {}
+        return ids, status_map
+
+    return _get_cached_static_data("vehicle_master", [MASTER_VEHICLES_PATH], _load)
 
 
 def filter_rows_by_vehicle_ids(rows, allowed_ids):
@@ -2325,23 +2373,26 @@ def load_vehicle_latest_from_cassandra_with_meta(limit: int = 200):
 
 def read_warehouses():
     # Carga y normaliza catalogo de almacenes (cast seguro de coordenadas).
-    rows = []
-    if not WAREHOUSES_PATH.exists():
+    def _load():
+        rows = []
+        if not WAREHOUSES_PATH.exists():
+            return rows
+
+        with WAREHOUSES_PATH.open("r", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                try:
+                    row["latitude"] = float(row.get("latitude")) if row.get("latitude") else None
+                except ValueError:
+                    row["latitude"] = None
+                try:
+                    row["longitude"] = float(row.get("longitude")) if row.get("longitude") else None
+                except ValueError:
+                    row["longitude"] = None
+                rows.append(row)
         return rows
 
-    with WAREHOUSES_PATH.open("r", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            try:
-                row["latitude"] = float(row.get("latitude")) if row.get("latitude") else None
-            except ValueError:
-                row["latitude"] = None
-            try:
-                row["longitude"] = float(row.get("longitude")) if row.get("longitude") else None
-            except ValueError:
-                row["longitude"] = None
-            rows.append(row)
-    return rows
+    return _get_cached_static_data("warehouses", [WAREHOUSES_PATH], _load)
 
 
 def warehouse_by_id(warehouses):

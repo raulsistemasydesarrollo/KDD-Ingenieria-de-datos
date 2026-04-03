@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Guion de presentacion oral ante profesor`
-- Version: `v1.0`
-- Fecha: `02/04/2026`
+- Version: `v1.1`
+- Fecha: `03/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## 1. Objetivo de la exposicion
@@ -210,7 +210,7 @@ Usa esta narrativa:
 3. evidencias en docs:
    - `docs/operations.md`
    - `docs/memoria-tecnica-sistema.md`
-   - `docs/release-notes-2026-04-02.md`
+   - `docs/release-notes-2026-04-03.md`
 
 ## 5. Preguntas tipicas del profesor (y respuesta corta)
 

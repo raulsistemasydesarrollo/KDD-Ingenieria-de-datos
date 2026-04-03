@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Indice maestro de entrega`
-- Version: `v1.2`
-- Fecha: `02/04/2026`
+- Version: `v1.3`
+- Fecha: `03/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## 1. Documentos principales
@@ -18,16 +18,18 @@
    - [docs/dashboard.md](./dashboard.md)
 4. Guia de operaciones y troubleshooting:
    - [docs/operations.md](./operations.md)
-5. Release notes de la iteracion:
-   - [docs/release-notes-2026-04-02.md](./release-notes-2026-04-02.md)
-6. Guia general del repositorio:
+5. Manual de usuario integral (arranque/parada, dashboard, Airflow DAGs y uso diario):
+   - [docs/manual-usuario.md](./manual-usuario.md)
+6. Release notes de la iteracion:
+   - [docs/release-notes-2026-04-03.md](./release-notes-2026-04-03.md)
+7. Guia general del repositorio:
    - [README.md](../README.md)
-7. Arquitectura tecnica + diagrama:
+8. Arquitectura tecnica + diagrama:
    - [docs/architecture.md](./architecture.md)
    - [docs/architecture-diagram.png](./architecture-diagram.png)
-8. Guia de anotacion de codigo:
+9. Guia de anotacion de codigo:
    - [docs/CODE-ANNOTATION-GUIDE.md](./CODE-ANNOTATION-GUIDE.md)
-9. Changelog consolidado:
+10. Changelog consolidado:
    - [CHANGELOG.md](../CHANGELOG.md)
 
 ## 2. Alcance funcional entregado
@@ -126,7 +128,7 @@ python3 scripts/build_delivery_pdf.py
 
 Salida esperada:
 
-- `docs/entrega-unificada-YYYY-MM-DD.pdf` (ej. `docs/entrega-unificada-2026-04-02.pdf`)
+- `docs/entrega-unificada-YYYY-MM-DD.pdf` (ej. `docs/entrega-unificada-2026-04-03.pdf`)
 
 PDF profesional (maquetado con `pandoc/latex`):
 
@@ -136,7 +138,7 @@ PDF profesional (maquetado con `pandoc/latex`):
 
 Salida esperada:
 
-- `docs/entrega-unificada-profesional-YYYY-MM-DD.pdf` (ej. `docs/entrega-unificada-profesional-2026-04-02.pdf`)
+- `docs/entrega-unificada-profesional-YYYY-MM-DD.pdf` (ej. `docs/entrega-unificada-profesional-2026-04-03.pdf`)
 
 ## 6. Nota final
 

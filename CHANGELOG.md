@@ -8,6 +8,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ### Added
 
+- Nuevo manual de usuario integral:
+  - `docs/manual-usuario.md`
+  - incluye arranque/parada del stack, uso completo del dashboard, uso de DAGs de Airflow, checks de salud, consultas BBDD y troubleshooting.
 - Persistencia streaming en Hive de eventos enriquecidos: `transport_analytics.enriched_events_streaming`.
 - Nuevo fallback Parquet de streaming: `/data/curated/enriched_events_streaming`.
 - Persistencia de snapshots de insights en Cassandra: `transport.network_insights_snapshots`.
@@ -20,6 +23,22 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ### Changed
 
+- Documentacion de entrega sincronizada a `v1.3` (`03/04/2026`) en README y documentos principales de `docs/`.
+- Nuevo release notes de iteracion actual: `docs/release-notes-2026-04-03.md`.
+- `docs/operations.md` ampliado con catalogo operativo de scripts:
+  - checks de salud,
+  - reinicio completo/parcial de servicios,
+  - consultas BBDD (Hive/Cassandra),
+  - troubleshooting y recuperacion.
+- `README.md` ampliado con bloque de operacion diaria (healthchecks, reinicios, consultas y recuperacion).
+- Enlaces al nuevo manual de usuario añadidos en documentacion principal:
+  - `README.md`
+  - `docs/ENTREGA.md`
+  - `docs/operations.md`
+  - `docs/dashboard.md`
+- Builders PDF actualizados para consumir release notes actual:
+  - `scripts/build_delivery_pdf.py`
+  - `scripts/build_delivery_pdf_professional.sh`
 - Generador GPS actualizado a rutas realistas sobre grafo logistico y flota actual leida desde `data/master/vehicles.csv`.
 - Bootstrap NiFi actualizado a `kdd_ingestion_auto_v9`.
 - Flujo GPS NiFi actualizado con renombrado unico por split (`${filename}_${fragment.index}_${UUID()}.jsonl`) para evitar sobrescrituras en `raw-archive/gps`.

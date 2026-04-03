@@ -21,11 +21,12 @@ import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.WindowSpec;
-import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.storage.StorageLevel;
 
 import static org.apache.spark.sql.functions.avg;
+import static org.apache.spark.sql.functions.broadcast;
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.coalesce;
 import static org.apache.spark.sql.functions.count;
@@ -83,6 +84,10 @@ public final class LogisticsAnalyticsJob {
     private static final String WEATHER_STREAMING_TABLE = DATABASE + ".weather_observations_streaming";
     private static final String DELAY_STREAMING_TABLE = DATABASE + ".delay_metrics_streaming";
     private static final String DELAY_BATCH_TABLE = DATABASE + ".delay_metrics_batch";
+    private static final int SHUFFLE_PARTITIONS =
+            Integer.parseInt(System.getenv().getOrDefault("SPARK_SQL_SHUFFLE_PARTITIONS", "4"));
+    private static final String AUTO_BROADCAST_THRESHOLD =
+            System.getenv().getOrDefault("SPARK_SQL_AUTO_BROADCAST_JOIN_THRESHOLD", "20971520");
 
     private LogisticsAnalyticsJob() {
     }
@@ -96,7 +101,16 @@ public final class LogisticsAnalyticsJob {
                 .appName("LogisticsKddJob")
                 .master(System.getenv().getOrDefault("SPARK_MASTER", "yarn"))
                 .config("spark.sql.session.timeZone", sqlTimeZone)
-                .config("spark.sql.shuffle.partitions", "4")
+                .config("spark.sql.shuffle.partitions", Integer.toString(SHUFFLE_PARTITIONS))
+                .config("spark.sql.adaptive.enabled", "true")
+                .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+                .config("spark.sql.adaptive.localShuffleReader.enabled", "true")
+                .config("spark.sql.adaptive.skewJoin.enabled", "true")
+                .config("spark.sql.autoBroadcastJoinThreshold", AUTO_BROADCAST_THRESHOLD)
+                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                .config("spark.rdd.compress", "true")
+                .config("spark.shuffle.compress", "true")
+                .config("spark.shuffle.spill.compress", "true")
                 .config("spark.sql.warehouse.dir", "hdfs://hadoop:9000/user/hive/warehouse")
                 .config("spark.cassandra.connection.host", "cassandra")
                 .config("spark.cassandra.connection.port", "9042")
@@ -127,69 +141,77 @@ public final class LogisticsAnalyticsJob {
 
         Dataset<Row> cleanedEvents = cleanAndNormalizeEvents(rawEvents)
                 .dropDuplicates("event_id");
-        Dataset<Row> enrichedEvents = enrichEvents(spark, cleanedEvents);
+        Dataset<Row> enrichedEvents = enrichEvents(spark, cleanedEvents)
+                .persist(StorageLevel.MEMORY_AND_DISK());
 
-        enrichedEvents.write()
-                .mode(SaveMode.Overwrite)
-                .format("parquet")
-                .save("hdfs://hadoop:9000/data/curated/enriched_events");
+        try {
+            enrichedEvents.write()
+                    .mode(SaveMode.Overwrite)
+                    .format("parquet")
+                    .save("hdfs://hadoop:9000/data/curated/enriched_events");
 
-        enrichedEvents.write()
-                .mode(SaveMode.Overwrite)
-                .saveAsTable(DATABASE + ".enriched_events");
+            enrichedEvents.write()
+                    .mode(SaveMode.Overwrite)
+                    .saveAsTable(DATABASE + ".enriched_events");
 
-        Dataset<Row> delayMetrics = enrichedEvents
-                .groupBy(
-                        window(col("event_timestamp"), "15 minutes"),
-                        col("warehouse_id"),
-                        col("warehouse_name"),
-                        col("region"))
-                .agg(
-                        avg("delay_minutes").alias("avg_delay_minutes"),
-                        avg("speed_kmh").alias("avg_speed_kmh"),
-                        count(lit(1)).alias("event_count"))
-                .select(
-                        col("window.start").alias("window_start"),
-                        col("window.end").alias("window_end"),
-                        col("warehouse_id"),
-                        col("warehouse_name"),
-                        col("region"),
-                        col("avg_delay_minutes"),
-                        col("avg_speed_kmh"),
-                        col("event_count"));
+            Dataset<Row> delayMetrics = enrichedEvents
+                    .groupBy(
+                            window(col("event_timestamp"), "15 minutes"),
+                            col("warehouse_id"),
+                            col("warehouse_name"),
+                            col("region"))
+                    .agg(
+                            avg("delay_minutes").alias("avg_delay_minutes"),
+                            avg("speed_kmh").alias("avg_speed_kmh"),
+                            count(lit(1)).alias("event_count"))
+                    .select(
+                            col("window.start").alias("window_start"),
+                            col("window.end").alias("window_end"),
+                            col("warehouse_id"),
+                            col("warehouse_name"),
+                            col("region"),
+                            col("avg_delay_minutes"),
+                            col("avg_speed_kmh"),
+                            col("event_count"));
 
-        delayMetrics.write()
-                .mode(SaveMode.Overwrite)
-                .saveAsTable(DATABASE + ".delay_metrics_batch");
+            delayMetrics.write()
+                    .mode(SaveMode.Overwrite)
+                    .saveAsTable(DATABASE + ".delay_metrics_batch");
 
-        Dataset<Row> graphMetrics = computeGraphMetrics(spark);
-        graphMetrics.write()
-                .mode(SaveMode.Overwrite)
-                .saveAsTable(DATABASE + ".route_graph_metrics");
-        Dataset<Row> shortestPathMetrics = computeShortestPathMetrics(spark);
-        shortestPathMetrics.write()
-                .mode(SaveMode.Overwrite)
-                .saveAsTable(DATABASE + ".route_shortest_paths");
+            Dataset<Row> graphMetrics = computeGraphMetrics(spark);
+            graphMetrics.write()
+                    .mode(SaveMode.Overwrite)
+                    .saveAsTable(DATABASE + ".route_graph_metrics");
+            Dataset<Row> shortestPathMetrics = computeShortestPathMetrics(spark);
+            shortestPathMetrics.write()
+                    .mode(SaveMode.Overwrite)
+                    .saveAsTable(DATABASE + ".route_shortest_paths");
 
-        saveLatestVehicleState(enrichedEvents);
-        trainAndScoreDelayRiskModel(spark, enrichedEvents);
+            saveLatestVehicleState(enrichedEvents);
+            trainAndScoreDelayRiskModel(spark, enrichedEvents);
+        } finally {
+            enrichedEvents.unpersist();
+        }
     }
 
     private static void runStreamingAnalysis(SparkSession spark) throws Exception {
         // Pipeline continuo de GPS y clima para monitorizacion operativa.
         String startingOffsets = System.getenv().getOrDefault("STREAMING_STARTING_OFFSETS", "latest");
+        String maxOffsetsPerTrigger = System.getenv().getOrDefault("STREAMING_MAX_OFFSETS_PER_TRIGGER", "8000");
 
         Dataset<Row> kafkaStream = spark.readStream()
                 .format("kafka")
                 .option("kafka.bootstrap.servers", "kafka:9092")
                 .option("subscribe", "transport.filtered")
                 .option("startingOffsets", startingOffsets)
+                .option("maxOffsetsPerTrigger", maxOffsetsPerTrigger)
                 .load();
         Dataset<Row> weatherKafkaStream = spark.readStream()
                 .format("kafka")
                 .option("kafka.bootstrap.servers", "kafka:9092")
                 .option("subscribe", "transport.weather.filtered")
                 .option("startingOffsets", startingOffsets)
+                .option("maxOffsetsPerTrigger", maxOffsetsPerTrigger)
                 .load();
 
         Dataset<Row> parsedEvents = kafkaStream
@@ -251,18 +273,18 @@ public final class LogisticsAnalyticsJob {
                     saveWeatherObservationsToCassandra(batch);
                 };
 
-        StreamingQuery metricsQuery = windowedMetrics.writeStream()
+        windowedMetrics.writeStream()
                 .outputMode("update")
                 .option("checkpointLocation", "hdfs://hadoop:9000/tmp/checkpoints/delay_metrics")
                 .foreachBatch(metricsBatchWriter)
                 .start();
 
-        StreamingQuery stateQuery = enrichedStream.writeStream()
+        enrichedStream.writeStream()
                 .outputMode("append")
                 .option("checkpointLocation", "hdfs://hadoop:9000/tmp/checkpoints/latest_vehicle_state")
                 .foreachBatch(stateBatchWriter)
                 .start();
-        StreamingQuery weatherQuery = weatherStream.writeStream()
+        weatherStream.writeStream()
                 .outputMode("append")
                 .option("checkpointLocation", "hdfs://hadoop:9000/tmp/checkpoints/weather_observations")
                 .foreachBatch(weatherBatchWriter)
@@ -301,11 +323,13 @@ public final class LogisticsAnalyticsJob {
                             col("total_minutes"),
                             col("congestion_level"),
                             col("live_sample_count"))
-                    .withColumn("snapshot_hour", date_trunc("hour", col("snapshot_time")));
+                    .withColumn("snapshot_hour", date_trunc("hour", col("snapshot_time")))
+                    .persist(StorageLevel.MEMORY_AND_DISK());
 
-            normalized.write()
-                    .mode(SaveMode.Overwrite)
-                    .saveAsTable(HIVE_INSIGHTS_SNAPSHOTS_TABLE);
+            try {
+                normalized.write()
+                        .mode(SaveMode.Overwrite)
+                        .saveAsTable(HIVE_INSIGHTS_SNAPSHOTS_TABLE);
 
             WindowSpec topEdgeWindow = Window
                     .partitionBy("snapshot_hour", "profile", "min_congestion")
@@ -341,13 +365,16 @@ public final class LogisticsAnalyticsJob {
                             col("effective_avg_delay_minutes").alias("top_node_avg_incident_delay_minutes"),
                             col("total_minutes").alias("top_node_avg_profile_minutes"));
 
-            Dataset<Row> hourlyTrends = topEdges
-                    .join(topNodes, new String[]{"snapshot_hour", "profile", "min_congestion"}, "full_outer")
-                    .orderBy(col("snapshot_hour").desc(), col("profile").asc(), col("min_congestion").asc());
+                Dataset<Row> hourlyTrends = topEdges
+                        .join(topNodes, new String[]{"snapshot_hour", "profile", "min_congestion"}, "full_outer")
+                        .orderBy(col("snapshot_hour").desc(), col("profile").asc(), col("min_congestion").asc());
 
-            hourlyTrends.write()
-                    .mode(SaveMode.Overwrite)
-                    .saveAsTable(HIVE_INSIGHTS_HOURLY_TRENDS_TABLE);
+                hourlyTrends.write()
+                        .mode(SaveMode.Overwrite)
+                        .saveAsTable(HIVE_INSIGHTS_HOURLY_TRENDS_TABLE);
+            } finally {
+                normalized.unpersist();
+            }
 
             System.out.println(
                     "INFO: insights-sync completado. Tablas Hive: "
@@ -370,8 +397,8 @@ public final class LogisticsAnalyticsJob {
         Dataset<Row> vehicles = spark.table(MASTER_VEHICLES_TABLE);
 
         return cleanedEvents
-                .join(warehouses, "warehouse_id", "left")
-                .join(vehicles, "vehicle_id", "left");
+                .join(broadcast(warehouses), "warehouse_id", "left")
+                .join(broadcast(vehicles), "vehicle_id", "left");
     }
 
     private static void ensureHiveMasterTables(SparkSession spark) {
@@ -460,10 +487,13 @@ public final class LogisticsAnalyticsJob {
 
     private static void trainAndScoreDelayRiskModel(SparkSession spark, Dataset<Row> enrichedEvents) {
         // Entrena y aplica modelo de riesgo de retraso a estado reciente por vehiculo.
+        Dataset<Row> eventsWithMlContext = null;
+        Dataset<Row> mlDataset = null;
         try {
-            Dataset<Row> eventsWithMlContext = enrichEventsWithMlContext(spark, enrichedEvents);
+            eventsWithMlContext = enrichEventsWithMlContext(spark, enrichedEvents)
+                    .persist(StorageLevel.MEMORY_AND_DISK());
 
-            Dataset<Row> mlDataset = eventsWithMlContext
+            mlDataset = eventsWithMlContext
                     .filter(col("delay_minutes").isNotNull())
                     .filter(col("speed_kmh").isNotNull())
                     .filter(col("warehouse_id").isNotNull())
@@ -500,6 +530,7 @@ public final class LogisticsAnalyticsJob {
                             "hour_cos",
                             cos(col("hour_of_day").multiply(lit((2.0 * Math.PI) / 24.0))))
                     .withColumn("label", col("delay_minutes").cast(DataTypes.DoubleType));
+            mlDataset = mlDataset.persist(StorageLevel.MEMORY_AND_DISK());
 
             long mlCount = mlDataset.count();
 
@@ -728,6 +759,13 @@ public final class LogisticsAnalyticsJob {
                     "WARN: fallo en entrenamiento/scoring ML de delay risk. "
                             + "Se continúa con el pipeline. Causa: "
                             + mlFailure.getMessage());
+        } finally {
+            if (mlDataset != null) {
+                mlDataset.unpersist();
+            }
+            if (eventsWithMlContext != null) {
+                eventsWithMlContext.unpersist();
+            }
         }
     }
 
@@ -853,6 +891,9 @@ public final class LogisticsAnalyticsJob {
 
     private static void appendToHiveTable(Dataset<Row> batch, String tableName, String fallbackPath) {
         // Escritura robusta en Hive; fallback a parquet si hay incompatibilidad runtime/metastore.
+        if (batch == null || batch.isEmpty()) {
+            return;
+        }
         SparkSession spark = batch.sparkSession();
         try {
             if (!spark.catalog().tableExists(tableName)) {
@@ -1052,4 +1093,5 @@ public final class LogisticsAnalyticsJob {
                 .add("source", DataTypes.StringType)
                 .add("observation_time", DataTypes.StringType);
     }
+
 }
