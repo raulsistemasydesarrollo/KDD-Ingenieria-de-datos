@@ -52,6 +52,7 @@ const state = {
   retrainState: null,
   retrainAdvice: null,
   retrainModelInfo: null,
+  retrainScheduleInfo: null,
   routeCalcDebounceTimer: null,
   lastOverview: null,
   lastOverviewLiveEdgeSummary: null
@@ -1270,10 +1271,12 @@ function renderRetrainStatePanel() {
   const adviceEl = document.getElementById("retrain-advice");
   const modelActiveEl = document.getElementById("retrain-model-active");
   const modelCandidatesEl = document.getElementById("retrain-model-candidates");
+  const scheduleInfoEl = document.getElementById("retrain-schedule-info");
   const btn = document.getElementById("retrain-btn");
   const retrainState = state.retrainState || {};
   const advice = state.retrainAdvice || {};
   const modelInfo = state.retrainModelInfo || {};
+  const scheduleInfo = state.retrainScheduleInfo || {};
   const status = String(retrainState.status || "idle").toLowerCase();
   const statusLabelMap = {
     idle: "en espera",
@@ -1296,6 +1299,14 @@ function renderRetrainStatePanel() {
   if (btn) {
     btn.disabled = status === "running";
     btn.textContent = status === "running" ? "Reentrenando..." : "Reentrenar IA";
+  }
+  if (scheduleInfoEl) {
+    const lastAt = scheduleInfo.last_success_at || scheduleInfo.last_retrain_at;
+    const nextAt = scheduleInfo.next_scheduled_at;
+    const tz = scheduleInfo.timezone ? ` (${scheduleInfo.timezone})` : "";
+    scheduleInfoEl.textContent =
+      `Ultimo reentreno: ${lastAt ? fmt.dt(lastAt) : "-"} | ` +
+      `Siguiente programado: ${nextAt ? fmt.dt(nextAt) : "-"}${tz}`;
   }
   if (adviceEl) {
     const recommended = !!advice.recommended;
@@ -1388,6 +1399,7 @@ async function refreshRetrainStatus() {
     state.retrainState = payload.state || null;
     state.retrainAdvice = payload.advice || null;
     state.retrainModelInfo = payload.model_info || null;
+    state.retrainScheduleInfo = payload.schedule_info || null;
     if (state.lastOverview) {
       renderOverview(state.lastOverview, state.lastOverviewLiveEdgeSummary);
     }
@@ -1408,6 +1420,7 @@ async function triggerRetrain() {
     state.retrainState = payload.state || state.retrainState;
     state.retrainAdvice = payload.advice || state.retrainAdvice;
     state.retrainModelInfo = payload.model_info || state.retrainModelInfo;
+    state.retrainScheduleInfo = payload.schedule_info || state.retrainScheduleInfo;
     renderRetrainStatePanel();
   } catch (err) {
     const statusEl = document.getElementById("retrain-status");

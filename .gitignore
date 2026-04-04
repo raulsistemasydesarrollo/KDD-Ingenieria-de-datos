@@ -14,3 +14,6 @@ nifi/raw-archive/**
 !nifi/raw-archive/weather/
 !nifi/raw-archive/gps/.gitkeep
 !nifi/raw-archive/weather/.gitkeep
+
+# Dashboard retrain runtime marker (generated at runtime by Airflow/script)
+data/state/

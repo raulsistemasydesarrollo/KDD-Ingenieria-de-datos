@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Manual de usuario funcional y operativo`
-- Version: `v1.0`
-- Fecha: `03/04/2026`
+- Version: `v1.1`
+- Fecha: `04/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -222,9 +222,13 @@ curl -s http://localhost:8501/api/ml/retrain/status
 
 Comportamiento:
 
-1. Si ya hay reentreno en curso, responde `409`.
+1. Si ya hay reentreno en curso (dashboard o Airflow), responde `409`.
 2. Si arranca correctamente, responde `202`.
 3. La cabecera del dashboard muestra estado, recomendacion y modelo en uso.
+4. Sobre el boton `Reentrenar IA` se muestran:
+   - `Ultimo reentreno`
+   - `Siguiente programado`
+   en horario `Europe/Madrid`.
 
 ## 5. Uso de DAGs en Airflow
 
@@ -299,6 +303,7 @@ Para que sirve:
 
 1. Reentreno/recalculo batch de Spark (`run-batch.sh`).
 2. Limpieza de checkpoints temporales en HDFS.
+3. Evitar solapamiento de runs del propio DAG (`max_active_runs=1`).
 
 Tareas:
 
@@ -317,9 +322,9 @@ Desde UI de Airflow:
 Desde CLI (contenedor Airflow):
 
 ```bash
-docker compose exec -T airflow-webserver airflow dags list
-docker compose exec -T airflow-webserver airflow dags trigger kdd_bootstrap_stack
-docker compose exec -T airflow-webserver airflow dags list-runs -d kdd_bootstrap_stack -o table
+docker compose exec -T airflow-webserver /home/airflow/.local/bin/airflow dags list
+docker compose exec -T airflow-webserver /home/airflow/.local/bin/airflow dags trigger kdd_bootstrap_stack
+docker compose exec -T airflow-webserver /home/airflow/.local/bin/airflow dags list-runs -d kdd_bootstrap_stack -o table
 ```
 
 ## 6. Comprobaciones de salud y estado
@@ -443,6 +448,32 @@ curl -s http://localhost:8501/api/vehicles/latest?limit=5
 docker compose restart dashboard
 ```
 
+### 8.7 HDFS UI muestra "Couldn't preview the file"
+
+Opcion recomendada (sin tocar HDFS interno):
+
+```bash
+./scripts/toggle_hdfs_browser_preview_hosts.sh status
+sudo ./scripts/toggle_hdfs_browser_preview_hosts.sh enable
+```
+
+Implicaciones de la opcion recomendada:
+
+1. Solo afecta al host local (`/etc/hosts`).
+2. Mantiene estabilidad de Spark/Airflow contra HDFS.
+3. Permite que el navegador resuelva `hadoop` al seguir el redirect de NameNode.
+
+Cambio temporal alternativo (solo para prueba puntual, no recomendado):
+
+1. Cambiar `docker/hadoop/conf/hdfs-site.xml` para anunciar DataNode como `localhost`.
+2. Reconstruir/recrear `hadoop`.
+
+Implicaciones del cambio temporal alternativo:
+
+1. El preview web puede funcionar mejor desde host.
+2. Spark/Airflow en contenedores pueden fallar escribiendo en HDFS (`Connection refused`, `minReplication nodes`).
+3. Revertir el cambio al terminar la prueba.
+
 ## 9. Comandos de referencia rapida
 
 Arranque/parada:
@@ -479,6 +510,6 @@ Recuperacion:
 Airflow manual:
 
 ```bash
-docker compose exec -T airflow-webserver airflow dags trigger kdd_bootstrap_stack
-docker compose exec -T airflow-webserver airflow dags list-runs -d kdd_hourly_healthcheck -o table
+docker compose exec -T airflow-webserver /home/airflow/.local/bin/airflow dags trigger kdd_bootstrap_stack
+docker compose exec -T airflow-webserver /home/airflow/.local/bin/airflow dags list-runs -d kdd_hourly_healthcheck -o table
 ```

@@ -17,7 +17,7 @@ DOCS = [
     ROOT / "docs" / "operations.md",
     ROOT / "docs" / "manual-usuario.md",
     ROOT / "docs" / "architecture.md",
-    ROOT / "docs" / "release-notes-2026-04-03.md",
+    ROOT / "docs" / "release-notes-2026-04-04.md",
     ROOT / "README.md",
     ROOT / "CHANGELOG.md",
 ]

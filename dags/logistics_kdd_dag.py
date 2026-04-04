@@ -44,15 +44,16 @@ with DAG(
     start_date=datetime(2026, 1, 1),
     schedule="@monthly",
     catchup=False,
+    max_active_runs=1,
     default_args=default_args,
     on_failure_callback=notify_failure,
     tags=["big-data", "spark", "hadoop", "kdd"],
 ) as dag:
     retrain_graph_model = BashOperator(
         task_id="retrain_graph_model",
-        # Nota: el espacio final evita que Airflow/Jinja intente resolver todo el comando
-        # como una plantilla de archivo .sh (TemplateNotFound).
-        bash_command="docker exec spark-client bash /opt/spark-app/run-batch.sh ",
+        # Nota: el espacio final evita que Airflow/Jinja intente resolver el
+        # comando como plantilla de archivo (TemplateNotFound).
+        bash_command="bash /opt/project/scripts/airflow_retrain_with_status.sh ",
     )
 
     cleanup_temp_hdfs = BashOperator(

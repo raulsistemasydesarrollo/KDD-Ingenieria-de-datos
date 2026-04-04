@@ -162,6 +162,40 @@ Indice maestro de entrega:
 
 ## Operacion diaria (checks, reinicios, BBDD y troubleshooting)
 
+Preview HDFS en navegador (opcional):
+
+```bash
+./scripts/toggle_hdfs_browser_preview_hosts.sh status
+sudo ./scripts/toggle_hdfs_browser_preview_hosts.sh enable
+```
+
+Revertir ajuste:
+
+```bash
+sudo ./scripts/toggle_hdfs_browser_preview_hosts.sh disable
+```
+
+Implicaciones:
+
+- Este ajuste solo toca `/etc/hosts` del host (`127.0.0.1 hadoop`).
+- Permite que el navegador siga el redirect de NameNode a `http://hadoop:9864/...`.
+- No modifica `hdfs-site.xml`, por tanto **no rompe Spark** ni clientes internos Docker.
+
+Cambio temporal alternativo (NO recomendado salvo prueba puntual):
+
+1. Editar `docker/hadoop/conf/hdfs-site.xml` y fijar:
+   - `dfs.datanode.hostname=localhost`
+   - `dfs.client.use.datanode.hostname=true`
+   - `dfs.datanode.use.datanode.hostname=true`
+2. Reconstruir/recrear `hadoop`.
+
+Riesgo/impacto del cambio temporal alternativo:
+
+- El preview web desde host suele funcionar.
+- Clientes internos (Spark/Airflow en contenedores) pueden fallar escribiendo en HDFS con
+  `Connection refused` o `could only be written to 0 of the 1 minReplication nodes`.
+- Tras la prueba, revertir esos 3 parametros y recrear `hadoop`.
+
 Checks de salud rapidos:
 
 ```bash
@@ -375,7 +409,7 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
   - `docs/dashboard.md`,
   - `docs/memoria-tecnica-sistema.md`.
 - Nuevo documento de release notes para la iteracion actual:
-  - `docs/release-notes-2026-04-03.md`.
+  - `docs/release-notes-2026-04-04.md`.
 - Estado funcional del dashboard alineado con codigo actual:
   - perfiles adicionales `eco`, `low_risk`, `reliable`,
   - patron horario y pesos `tiempo/riesgo/eco`,
@@ -397,6 +431,24 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 - Builders de PDF de entrega ajustados a la iteracion activa:
   - `scripts/build_delivery_pdf.py` apunta a release notes actual,
   - `scripts/build_delivery_pdf_professional.sh` genera nombre de salida con fecha dinamica.
+
+## Cambios recientes (04/04/2026)
+
+- Capturas de estado actualizadas:
+  - `docs/airflow.png` (vista Airflow renovada),
+  - `docs/dashboard.png` (vista dashboard renovada).
+- Reentreno IA y orquestacion:
+  - DAG `logistics_kdd_monthly_maintenance` endurecido con `max_active_runs=1` para evitar runs paralelos.
+  - Reentreno mensual via `scripts/airflow_retrain_with_status.sh` con marcador runtime compartido.
+  - Dashboard bloquea trigger manual cuando detecta reentreno externo en curso (`409 Conflict`).
+- Cabecera de IA en dashboard:
+  - muestra `Ultimo reentreno` y `Siguiente programado` sobre el boton `Reentrenar IA`.
+  - horario de referencia mostrado en `Europe/Madrid`.
+  - endpoint `GET /api/ml/retrain/status` amplia respuesta con `schedule_info`.
+- Operativa HDFS UI:
+  - se documenta ajuste seguro por `/etc/hosts` para preview de ficheros desde navegador sin afectar Spark.
+- Release notes de esta iteracion:
+  - `docs/release-notes-2026-04-04.md`.
 
 ## Cambios recientes (31/03/2026)
 
@@ -461,6 +513,6 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 - Guia de dashboard y leyenda visual: `docs/dashboard.md`.
 - Endpoint debug de fuentes del dashboard: `GET /api/debug/sources`.
 - Plan TODO de cumplimiento del enunciado por fases KDD: `docs/kdd-todo.md`.
-- Bitacora de cambios de la iteracion 03/04/2026: `docs/release-notes-2026-04-03.md`.
+- Bitacora de cambios de la iteracion 04/04/2026: `docs/release-notes-2026-04-04.md`.
 - Memoria tecnica detallada del sistema (entrega): `docs/memoria-tecnica-sistema.md`.
 - Resumen ejecutivo (1-2 paginas) para portada/anexo inicial: `docs/resumen-ejecutivo-memoria.md`.

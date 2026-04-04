@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Especificacion funcional del dashboard`
-- Version: `v1.3`
-- Fecha: `03/04/2026`
+- Version: `v1.4`
+- Fecha: `04/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -35,7 +35,7 @@ Manual de usuario completo del sistema (incluye dashboard + Airflow + operacion)
 
 ## Captura actual
 
-![Dashboard logistica (captura actualizada 03/04/2026)](./dashboard.png)
+![Dashboard logistica (captura actualizada 04/04/2026)](./dashboard.png)
 
 ## Fuentes de datos del dashboard
 
@@ -220,6 +220,10 @@ Reglas de negocio que aplica el script al regenerar aristas:
 El dashboard incorpora operativa de reentreno en cabecera:
 
 - Boton `Reentrenar IA`.
+- Bloque de calendario sobre el boton:
+  - `Ultimo reentreno`
+  - `Siguiente programado`
+  - visualizado en `Europe/Madrid`.
 - Estado de ejecucion (`idle`, `running`, `done`, `error`) con duracion y timestamp de fin.
 - Panel de recomendacion de reentreno con score de deriva (`0-100`) y motivos explicativos.
 - Bloque de modelos IA en dos paneles:
@@ -230,11 +234,12 @@ Endpoints asociados:
 
 - `POST /api/ml/retrain`:
   - dispara reentreno asincrono (por defecto comando `docker exec spark-client /opt/spark-app/run-batch.sh`),
-  - devuelve `202 Accepted` si arranca o `409 Conflict` si ya hay uno en curso.
+  - devuelve `202 Accepted` si arranca o `409 Conflict` si ya hay uno en curso (incluido curso externo via Airflow).
 - `GET /api/ml/retrain/status`:
   - devuelve estado runtime del proceso,
   - devuelve recomendacion cacheada de reentreno y metrica de deriva,
-  - devuelve `model_info` con candidatos, criterio de seleccion y ultimo ganador persistido.
+  - devuelve `model_info` con candidatos, criterio de seleccion y ultimo ganador persistido,
+  - devuelve `schedule_info` (`last_retrain_at`, `next_scheduled_at`, `timezone`).
 
 Reglas operativas de recomendacion:
 
@@ -249,6 +254,12 @@ Comportamiento del job de reentreno (Spark batch):
 - Selecciona automaticamente el de menor RMSE para persistir el modelo final.
 - El backend persiste el ultimo ganador (`last_selected_model`) y los RMSE de referencia en Cassandra para mostrarlos en cabecera tras reinicios.
 - Esto evita que un experimento de features degrade prediccion en produccion del dashboard.
+
+## Concurrencia de reentreno (Airflow + Dashboard)
+
+- El DAG mensual `logistics_kdd_monthly_maintenance` opera con `max_active_runs=1`.
+- Si existe un reentreno en curso marcado por Airflow, el boton manual del dashboard no dispara otro (respuesta `409`).
+- El estado runtime compartido permite reflejar en cabecera que el modelo esta `reentrenando` aunque el trigger venga desde DAG.
 
 ## Reglas de interpretacion de ruta por vehiculo
 

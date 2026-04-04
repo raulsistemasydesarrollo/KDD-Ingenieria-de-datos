@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Guia de operaciones y troubleshooting`
-- Version: `v1.3`
-- Fecha: `03/04/2026`
+- Version: `v1.4`
+- Fecha: `04/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -27,6 +27,7 @@
 15. Troubleshooting dashboard
 16. Sync de insights Cassandra -> Hive
 17. Reentreno IA del dashboard
+18. Preview HDFS en navegador (temporal y riesgos)
 
 Este documento resume los comandos recomendados para operar el entorno y validar resultados.
 
@@ -184,6 +185,13 @@ Reconstruir flujo NiFi y limpiar PGs legacy:
 ```bash
 ./scripts/bootstrap_nifi_flow.sh
 ./scripts/cleanup_nifi_legacy_pgs.py
+```
+
+Preview HDFS desde navegador (sin tocar HDFS interno):
+
+```bash
+./scripts/toggle_hdfs_browser_preview_hosts.sh status
+sudo ./scripts/toggle_hdfs_browser_preview_hosts.sh enable
 ```
 
 ## Healthcheck en Airflow
@@ -450,11 +458,11 @@ sg docker -c "docker compose exec -T spark-client bash /opt/spark-app/run-batch.
 sg docker -c "docker compose exec -T hadoop hdfs dfs -du -h /models/delay_risk_rf"
 ```
 
-Salida esperada (iteracion 03/04/2026):
+Salida esperada (iteracion 04/04/2026):
 
 - linea en logs con comparativa:
   - `INFO: ML A/B delay risk => baseline_rmse=... | tuned_baseline_rmse=... | enhanced_rmse=... | selected=...`
-- modelo persistido en `hdfs://hadoop:9000/models/delay_risk_rf` con tamano ~`1.2 MB` (estado validado 03/04/2026).
+- modelo persistido en `hdfs://hadoop:9000/models/delay_risk_rf` con tamano ~`1.2 MB` (estado validado 04/04/2026).
 
 Checklist de comprobacion rapida:
 
@@ -540,7 +548,7 @@ ORDER BY window_start_utc DESC
 LIMIT 10;
 ```
 
-## Bitacora operativa (actualizada 03/04/2026)
+## Bitacora operativa (actualizada 04/04/2026)
 
 Cambios aplicados:
 
@@ -549,6 +557,10 @@ Cambios aplicados:
 3. NiFi reorganizado por dominios (`gps_ingestion` y `weather_ingestion`) en `kdd_ingestion_auto_v9`.
 4. Process Group legacy eliminado para evitar ruido visual en la UI de NiFi.
 5. Incorporado flujo de insights de red con persistencia en Cassandra y sync a Hive.
+6. Reentreno mensual endurecido contra paralelismo (`max_active_runs=1` en DAG mensual).
+7. Dashboard muestra `Ultimo reentreno` y `Siguiente programado` en cabecera (hora Madrid).
+8. Trigger manual de reentreno bloqueado cuando existe ejecucion activa desde Airflow (`409`).
+9. Guia operativa de preview HDFS actualizada con opcion segura por `/etc/hosts` y riesgos del cambio temporal en `hdfs-site.xml`.
 
 ## Nota de tablas en tiempo real
 
@@ -660,6 +672,10 @@ Bloques de cabecera en estado actual:
 
 1. Panel izquierdo: `EN USO`, candidato elegido (`A/B/C`) y comparativa RMSE.
 2. Panel derecho: descripcion de los 3 candidatos en columna unica.
+3. Bloque de calendario sobre el boton:
+   - `Ultimo reentreno`
+   - `Siguiente programado`
+   - mostrado en `Europe/Madrid`.
 
 ### Endpoints
 
@@ -676,6 +692,13 @@ curl -s -X POST http://localhost:8501/api/ml/retrain \
 ```bash
 curl -s http://localhost:8501/api/ml/retrain/status
 ```
+
+Respuesta ampliada:
+
+- `state`
+- `advice`
+- `model_info`
+- `schedule_info` (`last_retrain_at`, `next_scheduled_at`, `timezone`)
 
 ### Variables de entorno relevantes
 
@@ -695,3 +718,50 @@ Tabla de estado de recomendacion/reentreno:
 ```bash
 docker compose exec -T cassandra cqlsh -e "SELECT model_name, last_success_at, last_run_at, last_status, last_recommendation, last_score, last_selected_model, last_selected_rmse, last_baseline_rmse, last_tuned_baseline_rmse, last_enhanced_rmse, updated_at FROM transport.model_retrain_state;"
 ```
+
+### Concurrencia y bloqueo de triggers
+
+1. El DAG mensual `logistics_kdd_monthly_maintenance` opera con `max_active_runs=1`.
+2. Si existe reentreno en curso (dashboard o Airflow), `POST /api/ml/retrain` devuelve `409`.
+3. El estado compartido permite que la cabecera refleje `running` cuando el trigger viene desde Airflow.
+
+## Preview HDFS en navegador (temporal y riesgos)
+
+Contexto:
+
+- En NameNode UI (`http://localhost:9870`) puede aparecer `Couldn't preview the file`.
+- Suele deberse a redirect a `http://hadoop:9864/...` que el host no resuelve.
+
+Camino recomendado (estable):
+
+```bash
+sudo ./scripts/toggle_hdfs_browser_preview_hosts.sh enable
+```
+
+Revertir:
+
+```bash
+sudo ./scripts/toggle_hdfs_browser_preview_hosts.sh disable
+```
+
+Implicaciones del recomendado:
+
+1. Solo modifica `/etc/hosts` del host.
+2. No toca `hdfs-site.xml`.
+3. No afecta Spark/Airflow internos.
+
+Cambio temporal alternativo (solo prueba puntual, no recomendado):
+
+1. Ajustar `docker/hadoop/conf/hdfs-site.xml` con:
+   - `dfs.datanode.hostname=localhost`
+   - `dfs.client.use.datanode.hostname=true`
+   - `dfs.datanode.use.datanode.hostname=true`
+2. Rebuild/recreate de `hadoop`.
+
+Implicaciones del alternativo:
+
+1. Puede mejorar preview web desde host.
+2. Puede romper escrituras HDFS desde contenedores Spark/Airflow:
+   - `Connection refused`
+   - `could only be written to 0 of the 1 minReplication nodes`
+3. Debe revertirse tras la prueba.

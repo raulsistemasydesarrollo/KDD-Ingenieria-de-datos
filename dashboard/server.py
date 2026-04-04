@@ -76,6 +76,8 @@ RETRAIN_COOLDOWN_HOURS = int(os.getenv("RETRAIN_COOLDOWN_HOURS", "48"))
 RETRAIN_STATUS_POLL_CACHE_SECONDS = int(os.getenv("RETRAIN_STATUS_POLL_CACHE_SECONDS", "30"))
 RETRAIN_STATE_TABLE = os.getenv("CASSANDRA_RETRAIN_STATE_TABLE", "model_retrain_state")
 RETRAIN_MODEL_NAME = os.getenv("RETRAIN_MODEL_NAME", "delay_risk_rf")
+RETRAIN_RUNTIME_STATE_FILE = PROJECT_ROOT / "data" / "state" / "retrain_runtime_state.json"
+RETRAIN_EXTERNAL_STATE_MAX_AGE_SECONDS = int(os.getenv("RETRAIN_EXTERNAL_STATE_MAX_AGE_SECONDS", "21600"))
 _RETRAIN_LOCK = threading.Lock()
 _RETRAIN_STATE = {
     "status": "idle",  # idle | running | done | error
@@ -150,6 +152,84 @@ def to_iso(dt: datetime):
 
 def now_utc():
     return datetime.now(timezone.utc)
+
+
+def load_external_retrain_runtime_state():
+    if not RETRAIN_RUNTIME_STATE_FILE.exists():
+        return None
+    try:
+        raw = json.loads(RETRAIN_RUNTIME_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    status = str(raw.get("status") or "").strip().lower()
+    if status not in {"idle", "running", "done", "error"}:
+        return None
+    updated_at = parse_iso_utc(str(raw.get("updated_at") or ""))
+    if updated_at is not None:
+        age_seconds = (now_utc() - updated_at).total_seconds()
+        if age_seconds > max(60, RETRAIN_EXTERNAL_STATE_MAX_AGE_SECONDS):
+            return None
+    return {
+        "status": status,
+        "message": str(raw.get("message") or ""),
+        "started_at": raw.get("started_at"),
+        "finished_at": raw.get("finished_at"),
+        "exit_code": raw.get("exit_code"),
+        "trigger": raw.get("trigger"),
+        "source": str(raw.get("source") or "airflow_dag"),
+        "run_id": raw.get("run_id"),
+        "updated_at": raw.get("updated_at"),
+    }
+
+
+def merge_retrain_state(runtime_state):
+    state = dict(runtime_state or {})
+    external = load_external_retrain_runtime_state()
+    if not external:
+        return state
+    runtime_status = str(state.get("status") or "idle").lower()
+    external_status = str(external.get("status") or "idle").lower()
+    if runtime_status == "running":
+        return state
+    if external_status == "running":
+        merged = dict(state)
+        merged["status"] = "running"
+        merged["started_at"] = external.get("started_at") or merged.get("started_at")
+        merged["finished_at"] = None
+        merged["duration_seconds"] = None
+        merged["exit_code"] = None
+        merged["trigger"] = external.get("trigger") or merged.get("trigger")
+        merged["message"] = external.get("message") or "Reentrenamiento en ejecucion desde Airflow."
+        merged["source"] = external.get("source")
+        merged["run_id"] = external.get("run_id")
+        return merged
+    return state
+
+
+def _next_monthly_run_utc(reference_utc: datetime | None = None):
+    ref = reference_utc or now_utc()
+    year = ref.year
+    month = ref.month + 1
+    if month == 13:
+        month = 1
+        year += 1
+    return datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+
+def build_retrain_schedule_info(persisted_state=None):
+    persisted = persisted_state if isinstance(persisted_state, dict) else {}
+    last_success = persisted.get("last_success_at")
+    last_run = persisted.get("last_run_at")
+    return {
+        "schedule": "@monthly",
+        "timezone": ROUTING_TZ,
+        "last_retrain_at": last_success or last_run,
+        "last_success_at": last_success,
+        "last_run_at": last_run,
+        "next_scheduled_at": to_iso(_next_monthly_run_utc()),
+    }
 
 
 def _clamp(value: float, low: float, high: float):
@@ -375,6 +455,10 @@ def _run_retrain_worker(trigger: str):
 
 def start_retrain_if_idle(trigger: str = "manual"):
     with _RETRAIN_LOCK:
+        external = load_external_retrain_runtime_state()
+        if external and str(external.get("status") or "").lower() == "running":
+            merged = merge_retrain_state(dict(_RETRAIN_STATE))
+            return False, merged
         if _RETRAIN_STATE.get("status") == "running":
             return False, dict(_RETRAIN_STATE)
         _RETRAIN_STATE["status"] = "running"
@@ -2514,6 +2598,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             advice = get_retrain_advice_cached()
             persisted_state = load_persisted_retrain_state()
             model_info = build_retrain_model_info(state, persisted_state=persisted_state)
+            schedule_info = build_retrain_schedule_info(persisted_state=persisted_state)
             status_code = HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT
             self._json(
                 {
@@ -2521,6 +2606,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "state": state,
                     "advice": advice,
                     "model_info": model_info,
+                    "schedule_info": schedule_info,
                     "command": RETRAIN_COMMAND,
                 },
                 status=status_code,
@@ -2535,10 +2621,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if path == "/api/ml/retrain/status":
             with _RETRAIN_LOCK:
                 state = dict(_RETRAIN_STATE)
+            state = merge_retrain_state(state)
             advice = get_retrain_advice_cached()
             persisted_state = load_persisted_retrain_state()
             model_info = build_retrain_model_info(state, persisted_state=persisted_state)
-            self._json({"state": state, "advice": advice, "model_info": model_info, "command": RETRAIN_COMMAND})
+            schedule_info = build_retrain_schedule_info(persisted_state=persisted_state)
+            self._json(
+                {
+                    "state": state,
+                    "advice": advice,
+                    "model_info": model_info,
+                    "schedule_info": schedule_info,
+                    "command": RETRAIN_COMMAND,
+                }
+            )
             return
 
         events = load_gps_events()
