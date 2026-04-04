@@ -1279,10 +1279,10 @@ function renderRetrainStatePanel() {
   const scheduleInfo = state.retrainScheduleInfo || {};
   const status = String(retrainState.status || "idle").toLowerCase();
   const statusLabelMap = {
-    idle: "en espera",
-    running: "reentrenando",
-    done: "completado",
-    error: "fallo"
+    idle: "Modelo en espera",
+    running: "Modelo reentrenando",
+    done: "Modelo completado",
+    error: "Modelo con fallo"
   };
   const statusLabel = statusLabelMap[status] || status;
   const duration = retrainState.duration_seconds ? ` (${fmt.n(retrainState.duration_seconds, 1)} s)` : "";
@@ -1290,7 +1290,7 @@ function renderRetrainStatePanel() {
     let suffix = "";
     if (status === "done") suffix = retrainState.finished_at ? ` | fin ${fmt.dt(retrainState.finished_at)}` : "";
     if (status === "error") suffix = retrainState.message ? ` | ${retrainState.message}` : "";
-    statusEl.textContent = `Modelo: ${statusLabel}${duration}${suffix}`;
+    statusEl.textContent = `${statusLabel}${duration}${suffix}`;
     statusEl.classList.remove("loading", "ok", "error");
     if (status === "running") statusEl.classList.add("loading");
     if (status === "done") statusEl.classList.add("ok");
@@ -1304,8 +1304,8 @@ function renderRetrainStatePanel() {
     const lastAt = scheduleInfo.last_success_at || scheduleInfo.last_retrain_at;
     const nextAt = scheduleInfo.next_scheduled_at;
     const tz = scheduleInfo.timezone ? ` (${scheduleInfo.timezone})` : "";
-    scheduleInfoEl.textContent =
-      `Ultimo reentreno: ${lastAt ? fmt.dt(lastAt) : "-"} | ` +
+    scheduleInfoEl.innerHTML =
+      `Ultimo reentreno: ${lastAt ? fmt.dt(lastAt) : "-"}<br />` +
       `Siguiente programado: ${nextAt ? fmt.dt(nextAt) : "-"}${tz}`;
   }
   if (adviceEl) {
@@ -1369,7 +1369,7 @@ function renderRetrainStatePanel() {
         `${Number.isFinite(selected.selected_rmse) ? ` (RMSE ${fmt.n(selected.selected_rmse, 4)})` : ""}</span>. ` +
         `<div class="model-candidates model-candidates-inline">Candidatos: ${candidatesPills}</div> ` +
         `${selected.reason || modelInfo.criterion || "Criterio: menor RMSE en test."}` +
-        `${rmseBits ? ` Comparativa RMSE: ${rmseBits}.` : ""}`;
+        `${rmseBits ? `<br />Comparativa RMSE: ${rmseBits}.` : ""}`;
       }
       if (modelCandidatesEl) {
         modelCandidatesEl.innerHTML =

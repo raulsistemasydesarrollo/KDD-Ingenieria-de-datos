@@ -25,11 +25,15 @@
               <div id="retrain-model-active" class="model-summary">Modelo en uso: cargando...</div>
               <div id="retrain-model-candidates" class="model-summary model-summary-desc">Candidatos: cargando...</div>
             </div>
-            <div id="retrain-schedule-info" class="model-summary model-summary-desc">
-              Ultimo reentreno: - | Siguiente programado: -
+            <div class="retrain-controls">
+              <div id="retrain-schedule-info" class="model-summary model-summary-desc">
+                Ultimo reentreno: -<br />Siguiente programado: -
+              </div>
+              <div class="retrain-action-row">
+                <button id="retrain-btn" type="button">Reentrenar IA</button>
+                <span id="retrain-status" class="route-status">Modelo en espera</span>
+              </div>
             </div>
-            <button id="retrain-btn" type="button">Reentrenar IA</button>
-            <span id="retrain-status" class="route-status">Modelo: estado no consultado</span>
           </div>
           <div id="retrain-advice" class="model-advice">Recomendacion IA: pendiente de evaluacion.</div>
         </div>
