@@ -754,8 +754,9 @@ body[data-theme="light"] .warehouse-label {
 }
 
 .truck-marker.truck-selected .truck-glyph {
+  color: #ffd166;
   opacity: 1;
-  transform: rotate(calc(var(--truck-angle, 0deg) - 90deg)) scale(1.14);
+  transform: rotate(calc(var(--truck-angle, 0deg) - 90deg)) scale(1.24);
 }
 
 .truck-marker.truck-alert .truck-glyph {
@@ -768,6 +769,16 @@ body[data-theme="light"] .warehouse-label {
 
 body[data-theme="light"] .truck-marker.truck-normal .truck-glyph {
   color: #007ea7;
+}
+
+.truck-marker.truck-selected.truck-alert .truck-glyph,
+.truck-marker.truck-selected.truck-normal .truck-glyph {
+  color: #ffd166;
+}
+
+body[data-theme="light"] .truck-marker.truck-selected.truck-alert .truck-glyph,
+body[data-theme="light"] .truck-marker.truck-selected.truck-normal .truck-glyph {
+  color: #ffd166;
 }
 
 #selected-vehicle-panel {

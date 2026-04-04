@@ -846,6 +846,56 @@ function fullPlannedRouteForVehicle(vehicle) {
   return { nodes, label };
 }
 
+function buildSelectedVehicleHistoricalTrail(vehicle, sampledPoints) {
+  const sampled = Array.isArray(sampledPoints) ? sampledPoints : [];
+  const fullRoute = fullPlannedRouteForVehicle(vehicle);
+  if (!fullRoute?.nodes?.length) return sampled;
+
+  const routePoints = fullRoute.nodes
+    .map((n) => [Number(n.latitude), Number(n.longitude)])
+    .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (!routePoints.length) return sampled;
+
+  const marker = state.markers.get(vehicle?.vehicle_id);
+  const currentLat = Number(marker?.getLatLng?.().lat ?? vehicle?.latitude);
+  const currentLng = Number(marker?.getLatLng?.().lng ?? vehicle?.longitude);
+  const current = Number.isFinite(currentLat) && Number.isFinite(currentLng) ? [currentLat, currentLng] : null;
+
+  let nearestIdx = routePoints.length - 1;
+  if (current) {
+    let best = Infinity;
+    routePoints.forEach((p, idx) => {
+      const d = distanceKm(
+        { lat: Number(p[0]), lng: Number(p[1]) },
+        { lat: Number(current[0]), lng: Number(current[1]) }
+      );
+      if (d < best) {
+        best = d;
+        nearestIdx = idx;
+      }
+    });
+  }
+
+  const merged = routePoints.slice(0, Math.max(1, nearestIdx + 1));
+  const appendIfFar = (point) => {
+    if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return;
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push(point);
+      return;
+    }
+    const d = distanceKm(
+      { lat: Number(last[0]), lng: Number(last[1]) },
+      { lat: Number(point[0]), lng: Number(point[1]) }
+    );
+    if (d >= 0.03) merged.push(point);
+  };
+
+  sampled.forEach(appendIfFar);
+  appendIfFar(current);
+  return merged;
+}
+
 function inferVehicleRoute(vehicle) {
   if (!vehicle) return { from: null, to: null, label: "-" };
   const planned = plannedRouteForVehicle(vehicle);
@@ -1045,7 +1095,7 @@ function updateMarkers(items) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const key = v.vehicle_id;
     const latlng = [lat, lng];
-    const selected = !state.selectedVehicle || state.selectedVehicle === key;
+    const selected = !!state.selectedVehicle && state.selectedVehicle === key;
 
     if (!state.markers.has(key)) {
       const nextNode = estimateNextNode(v, null);
@@ -1088,7 +1138,8 @@ function updateMarkers(items) {
       const trail = state.trails.get(key);
       const points = trail.getLatLngs();
       points.push(smoothedLatLng);
-      while (points.length > 8) points.shift();
+      const maxTrailPoints = state.selectedVehicle === key ? 220 : 8;
+      while (points.length > maxTrailPoints) points.shift();
       trail.setLatLngs(points);
     }
 
@@ -2100,9 +2151,14 @@ async function refreshVehicleHistory() {
   const sampled = history.items
     .map((p) => [p.latitude, p.longitude])
     .filter((p, idx, arr) => arr.length <= 16 || idx % Math.ceil(arr.length / 16) === 0 || idx === arr.length - 1);
+  const selectedVehicleData =
+    state.vehicles.find((v) => v.vehicle_id === vehicleId) ||
+    state.allVehicles.find((v) => v.vehicle_id === vehicleId) ||
+    null;
   const trail = state.trails.get(vehicleId);
-  if (trail && sampled.length) {
-    trail.setLatLngs(sampled);
+  if (trail && selectedVehicleData) {
+    const historicalTrail = buildSelectedVehicleHistoricalTrail(selectedVehicleData, sampled);
+    trail.setLatLngs(historicalTrail.length ? historicalTrail : sampled);
     updateTrailArrow(vehicleId, true);
   }
 
