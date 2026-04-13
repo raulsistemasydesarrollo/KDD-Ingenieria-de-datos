@@ -37,7 +37,13 @@ wait_for_http() {
 }
 
 echo "Arrancando stack completo del proyecto KDD..."
-sg docker -c "docker compose up -d --build"
+if [ "${KDD_BUILD_IMAGES:-0}" = "1" ]; then
+  echo "Modo rebuild activado (KDD_BUILD_IMAGES=1): construyendo imagenes..."
+  sg docker -c "docker compose up -d --build"
+else
+  echo "Modo rapido sin rebuild forzado: reutilizando imagenes locales..."
+  sg docker -c "docker compose up -d"
+fi
 
 echo
 wait_for_http "NiFi UI" "https://localhost:8443/nifi/" "200" 60 3 || true

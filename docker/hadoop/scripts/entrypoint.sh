@@ -8,10 +8,13 @@ set -euo pipefail
 # - Inicializar directorios HDFS requeridos por Hive y el proyecto.
 # - Mantener proceso vivo para uso continuo del contenedor.
 
-export JAVA_HOME="${JAVA_HOME:-/opt/java/openjdk}"
+export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/jre}"
 export HADOOP_HOME="${HADOOP_HOME:-/opt/hadoop}"
 export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-/opt/hadoop/etc/hadoop}"
 export PATH="${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${PATH}"
+
+mkdir -p /data/hdfs/namenode /data/hdfs/datanode /data/hdfs/tmp
+chmod -R 775 /data/hdfs || true
 
 if [ ! -f /data/hdfs/namenode/current/VERSION ]; then
   "${HADOOP_HOME}/bin/hdfs" namenode -format -force -nonInteractive
