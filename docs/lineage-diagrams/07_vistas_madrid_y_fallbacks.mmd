@@ -1,0 +1,7 @@
+flowchart LR
+  T1["delay_metrics_streaming"] --> V1["v_delay_metrics_streaming_madrid"]
+  T2["weather_observations_streaming"] --> V2["v_weather_observations_madrid"]
+
+  T1 -. "si falla Hive" .-> F1["Parquet /data/curated/delay_metrics_streaming"]
+  T2 -. "si falla Hive" .-> F2["Parquet /data/curated/weather_observations_streaming"]
+  E1["enriched_events_streaming"] -. "si falla Hive" .-> F3["Parquet /data/curated/enriched_events_streaming"]

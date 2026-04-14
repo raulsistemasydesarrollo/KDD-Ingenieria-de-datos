@@ -1,0 +1,9 @@
+flowchart LR
+  A1["Airflow monthly DAG"] --> B1["airflow_retrain_with_status.sh"]
+  B1 --> S1["run-batch.sh"]
+  S1 --> SP["Spark batch"]
+  SP --> H["Hive tables"]
+  SP --> C["Cassandra state"]
+  SP --> M["HDFS model artifact"]
+  B1 --> ST["data/state/retrain_runtime_state.json"]
+  ST --> D["Dashboard /api/ml/retrain/status"]

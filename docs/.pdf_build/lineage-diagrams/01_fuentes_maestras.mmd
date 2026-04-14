@@ -1,0 +1,8 @@
+flowchart LR
+  S1["warehouses.csv"] --> U["Uso en sistema"]
+  S2["vehicles.csv"] --> U
+  S3["vertices.csv"] --> U
+  S4["edges.csv"] --> U
+  U --> U1["Spark enriquecimiento"]
+  U --> U2["GraphFrames"]
+  U --> U3["Motor de rutas dashboard"]

@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real batch: event_time=2026-04-04T14:41:14Z, delay_minutes=8, speed_kmh=56.2"] --> B["Transformacion Spark batch: cast timestamp, dedupe event_id, join maestros, GraphFrames, RF ML"] --> C["Salida real Hive: enriched_events, route_graph_metrics, route_shortest_paths, ml_delay_risk_scores"]

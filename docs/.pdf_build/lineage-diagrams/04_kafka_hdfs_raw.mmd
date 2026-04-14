@@ -1,0 +1,9 @@
+flowchart LR
+  K1["transport.raw"] --> S["Spark streaming parse"]
+  K2["transport.filtered"] --> S
+  W1["transport.weather.raw"] --> SW["Spark weather parse"]
+  W2["transport.weather.filtered"] --> SW
+  A1["raw-archive/gps"] --> L["raw-hdfs-loader"]
+  A2["raw-archive/weather"] --> L
+  L --> H1["HDFS /data/raw/nifi/gps"]
+  L --> H2["HDFS /data/raw/nifi/weather"]

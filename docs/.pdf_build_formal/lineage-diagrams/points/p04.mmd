@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real split GPS: vehicle_id=TRUCK-019, warehouse_id=MAD, delay_minutes=8, event_time=2026-04-04T14:41:14Z"] --> B["Transformacion NiFi: SplitText + EvaluateJsonPath + filename unico con UUID"] --> C["Salida real: raw-archive/gps/gps_..._uuid.jsonl sin sobrescritura"]

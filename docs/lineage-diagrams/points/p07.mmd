@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real local: data/raw/gps_events.jsonl + data/master/* + data/graph/*"] --> B["Transformacion load-seed-data.sh: hdfs dfs -put"] --> C["Salida real HDFS seed: /data/raw/gps_events.jsonl, /data/master, /data/graph"]

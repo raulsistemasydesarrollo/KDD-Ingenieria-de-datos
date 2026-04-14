@@ -1,0 +1,12 @@
+flowchart LR
+  KF["Kafka transport.filtered"] --> P1["Parse GPS JSON"]
+  P1 --> N1["Watermark 20m + dedupe"]
+  N1 --> EN["Enrich with masters"]
+  EN --> H1["Hive delay_metrics_streaming"]
+  EN --> H2["Hive enriched_events_streaming"]
+  EN --> C1["Cassandra vehicle_latest_state"]
+
+  KW["Kafka transport.weather.filtered"] --> P2["Parse weather JSON"]
+  P2 --> N2["Watermark 20m + dedupe"]
+  N2 --> H3["Hive weather_observations_streaming"]
+  N2 --> C2["Cassandra weather_observations_recent"]

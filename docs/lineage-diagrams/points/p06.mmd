@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real raw-archive: gps_...jsonl y snapshots weather JSON"] --> B["Transformacion raw-hdfs-loader: copia a HDFS y prefija timestamp UTC"] --> C["Salida real HDFS: /data/raw/nifi/gps y /data/raw/nifi/weather"]

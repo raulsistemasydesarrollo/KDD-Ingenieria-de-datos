@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>data-lineage-comite-direccion</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="/work/docs/.pdf_build/pdf-print.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">data-lineage-comite-direccion</h1>
+</header>
+<h1
+id="trazabilidad-del-dato---resumen-para-comité-de-dirección">Trazabilidad
+del Dato - Resumen para Comité de Dirección</h1>
+<h2 id="plataforma-kdd-logística">Plataforma KDD Logística</h2>
+<p>Fecha: 14/04/2026<br />
+Versión: 1.0 (ejecutiva)</p>
+<hr />
+<h2 id="mensaje-clave-para-dirección">1) Mensaje clave para
+dirección</h2>
+<p>La plataforma dispone de trazabilidad completa del dato desde origen
+hasta decisión operativa en dashboard, con evidencias técnicas
+reproducibles, controles de calidad en streaming y mecanismos de
+resiliencia para continuidad del servicio.</p>
+<p>En términos de negocio, esto permite: 1. Visibilidad operativa en
+tiempo casi real de flota, clima y red logística. 2. Priorización de
+cuellos de botella con analítica de grafo. 3. Recomendaciones
+predictivas de riesgo de retraso para anticipar incidencias. 4. Gobierno
+del dato con capacidad de auditoría punto a punto.</p>
+<hr />
+<div style="page-break-before: always;">
+
+</div>
+<h2 id="flujo-ejecutivo-del-dato">2) Flujo ejecutivo del dato</h2>
+<h3 id="fase-1---captura-ingesta-y-persistencia-raw">Fase 1 - Captura,
+ingesta y persistencia raw</h3>
+<figure>
+<img src="./lineage-diagrams/flow-general-fase-1.svg"
+alt="Flujo ejecutivo fase 1" />
+<figcaption aria-hidden="true">Flujo ejecutivo fase 1</figcaption>
+</figure>
+<div style="page-break-after: always;">
+
+</div>
+<h3 id="fase-2---procesamiento-ia-y-consumo-en-dashboard">Fase 2 -
+Procesamiento, IA y consumo en dashboard</h3>
+<figure>
+<img src="./lineage-diagrams/flow-general-fase-2.svg"
+alt="Flujo ejecutivo fase 2" />
+<figcaption aria-hidden="true">Flujo ejecutivo fase 2</figcaption>
+</figure>
+<p>Resumen del recorrido: 1. Captura de datos (GPS + clima + maestros).
+2. Ingesta y enrutado (NiFi/Kafka). 3. Persistencia raw (HDFS) y
+procesamiento (Spark batch/streaming). 4. Publicación analítica (Hive),
+operativa de baja latencia (Cassandra) y modelo IA. 5. Consumo final en
+dashboard para mapas, estadísticas, rutas e IA.</p>
+<hr />
+<h2 id="qué-se-controla-y-por-qué-es-relevante">3) Qué se controla y por
+qué es relevante</h2>
+<h3 id="controles-de-calidad-del-dato">3.1 Controles de calidad del
+dato</h3>
+<ol type="1">
+<li>Dedupe por identificador de evento (<code>event_id</code>,
+<code>weather_event_id</code>).</li>
+<li>Watermark de 20 minutos para eventos tardíos.</li>
+<li>Ventanas de 15 minutos para agregados comparables.</li>
+<li>Normalización de tipos y timestamps en Spark.</li>
+</ol>
+<p>Impacto negocio: métricas más estables y menor ruido operacional.</p>
+<h3 id="controles-de-resiliencia">3.2 Controles de resiliencia</h3>
+<ol type="1">
+<li>Fallback a Parquet si Hive no está disponible en streaming.</li>
+<li>Fallback de lectura de dashboard a ficheros NiFi si Cassandra no
+responde.</li>
+<li>Persistencia de estado de reentreno IA para continuidad
+funcional.</li>
+</ol>
+<p>Impacto negocio: continuidad de servicio y menor riesgo de ceguera
+operativa.</p>
+<hr />
+<h2 id="fuentes-que-alimentan-la-toma-de-decisiones">4) Fuentes que
+alimentan la toma de decisiones</h2>
+<h3 id="mapas-y-operación-diaria">4.1 Mapas y operación diaria</h3>
+<ul>
+<li>Fuente principal: <code>transport.vehicle_latest_state</code>
+(Cassandra).</li>
+<li>Resultado en UI: posición de flota, velocidad, retraso, ETA.</li>
+</ul>
+<h3 id="estadísticas-operativas">4.2 Estadísticas operativas</h3>
+<ul>
+<li>Fuentes: <code>delay_metrics_streaming</code>,
+<code>weather_observations_streaming</code> y vistas Madrid.</li>
+<li>Resultado en UI: KPIs de retraso/velocidad/impacto meteo.</li>
+</ul>
+<h3 id="optimización-de-rutas-y-red">4.3 Optimización de rutas y
+red</h3>
+<ul>
+<li>Fuentes: grafo logístico + insights históricos.</li>
+<li>Resultado en UI: mejor ruta, rutas alternativas, cuellos de botella,
+nodos críticos.</li>
+</ul>
+<h3 id="ia-predictiva">4.4 IA predictiva</h3>
+<ul>
+<li>Fuente: dataset enriquecido + contexto meteo/congestión.</li>
+<li>Resultado en UI: scoring de riesgo (<code>low/medium/high</code>) y
+estado de reentreno.</li>
+</ul>
+<hr />
+<h2 id="riesgos-actuales-y-mitigación">5) Riesgos actuales y
+mitigación</h2>
+<ol type="1">
+<li><p>Riesgo: indisponibilidad temporal de Cassandra. Mitigación:
+fallback de lectura desde fuentes NiFi.</p></li>
+<li><p>Riesgo: incompatibilidad puntual de escritura Hive en streaming.
+Mitigación: escritura alternativa en Parquet
+(<code>/data/curated/*_streaming</code>).</p></li>
+<li><p>Riesgo: duplicidad por reintentos de ingesta. Mitigación:
+deduplicación en Spark antes de persistir.</p></li>
+</ol>
+<hr />
+<h2 id="indicadores-recomendados-para-cuadro-de-mando-de-dirección">6)
+Indicadores recomendados para cuadro de mando de dirección</h2>
+<ol type="1">
+<li>Freshness flota: tiempo desde último evento
+(<code>vehicle_latest_state</code>).</li>
+<li>Cobertura de datos: número de vehículos con estado válido.</li>
+<li>Delay medio por almacén y tendencia horaria.</li>
+<li>Severidad meteo y correlación con retrasos.</li>
+<li>Top cuellos de botella por impacto en red.</li>
+<li>Rendimiento del modelo IA (RMSE y tasa de riesgo alto).</li>
+</ol>
+<hr />
+<h2 id="decisiones-sugeridas-al-comité">7) Decisiones sugeridas al
+Comité</h2>
+<ol type="1">
+<li>Aprobar este esquema de trazabilidad como estándar de gobierno del
+dato logístico.</li>
+<li>Establecer un SLA formal de freshness para operación (p. ej. &lt; 15
+min).</li>
+<li>Consolidar un cuadro de mando directivo con los 6 indicadores
+anteriores.</li>
+<li>Programar revisión mensual de desempeño IA y deriva de modelo.</li>
+</ol>
+<hr />
+<h2 id="evidencia-técnica-completa">8) Evidencia técnica completa</h2>
+<p>Para auditoría detallada y demostración técnica punto a punto: -
+Documento completo: <a
+href="./data-lineage-empresa.md">data-lineage-empresa.md</a> - Scripts
+de evidencia: <code>scripts/data_lineage/00_run_all.sh</code> y
+<code>01..12</code></p>
+</body>
+</html>

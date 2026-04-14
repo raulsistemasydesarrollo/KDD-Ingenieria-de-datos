@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="760" viewBox="0 0 2200 760" role="img" aria-label="Flujo general de datos 12 puntos auditables">
+  <defs>
+    <style>
+      .title { font: 700 32px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 18px Arial, sans-serif; fill: #334155; }
+      .node { fill: #f8fafc; stroke: #1e3a8a; stroke-width: 2; rx: 14; ry: 14; }
+      .t1 { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .t2 { font: 400 14px Arial, sans-serif; fill: #1f2937; }
+      .edge { stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#arr); }
+      .edgeLbl { font: 600 13px Arial, sans-serif; fill: #334155; }
+    </style>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#334155" />
+    </marker>
+  </defs>
+
+  <text x="40" y="45" class="title">Flujo General End-to-End del Dato (12 puntos auditables)</text>
+  <text x="40" y="75" class="subtitle">Incluye ejemplos de dato de entrada, transformacion y salida por etapa</text>
+
+  <!-- Row 1 -->
+  <rect class="node" x="40" y="120" width="330" height="140"/>
+  <text x="60" y="150" class="t1">01 Origen maestro</text>
+  <text x="60" y="176" class="t2">Entrada: trucks.csv</text>
+  <text x="60" y="198" class="t2">Ejemplo: TRK-002,1234ABC,Euro6</text>
+  <text x="60" y="220" class="t2">Salida: tabla maestro en memoria</text>
+
+  <rect class="node" x="440" y="120" width="330" height="140"/>
+  <text x="460" y="150" class="t1">02 GPS generator</text>
+  <text x="460" y="176" class="t2">Entrada: maestro + rutas</text>
+  <text x="460" y="198" class="t2">Salida: gps_data.jsonl</text>
+  <text x="460" y="220" class="t2">Ej: {truck_id:"TRK-002",lat:40.41}</text>
+
+  <rect class="node" x="840" y="120" width="330" height="140"/>
+  <text x="860" y="150" class="t1">03 Meteo raw (API)</text>
+  <text x="860" y="176" class="t2">Entrada: Open-Meteo JSON</text>
+  <text x="860" y="198" class="t2">Salida: weather_YYYYMMDD.json</text>
+  <text x="860" y="220" class="t2">Ej: temp=18.2, wind=12.4</text>
+
+  <rect class="node" x="1240" y="120" width="330" height="140"/>
+  <text x="1260" y="150" class="t1">04 NiFi archiva GPS</text>
+  <text x="1260" y="176" class="t2">Entrada: nifi/input/*.jsonl</text>
+  <text x="1260" y="198" class="t2">Transforma: split + validacion</text>
+  <text x="1260" y="220" class="t2">Salida: raw-archive/gps/*.json</text>
+
+  <rect class="node" x="1640" y="120" width="330" height="140"/>
+  <text x="1660" y="150" class="t1">05 Kafka raw/filtered</text>
+  <text x="1660" y="176" class="t2">Entrada: JSON NiFi</text>
+  <text x="1660" y="198" class="t2">Salida: topics gps_raw / filtered</text>
+  <text x="1660" y="220" class="t2">Ej: key=TRK-002, ts=...</text>
+
+  <!-- Row 2 -->
+  <rect class="node" x="40" y="330" width="330" height="140"/>
+  <text x="60" y="360" class="t1">06 Raw en HDFS</text>
+  <text x="60" y="386" class="t2">Entrada: kafka + nifi raw</text>
+  <text x="60" y="408" class="t2">Salida: /tmp/kddm/raw/*.json</text>
+  <text x="60" y="430" class="t2">Formato: JSON newline-delimited</text>
+
+  <rect class="node" x="440" y="330" width="330" height="140"/>
+  <text x="460" y="360" class="t1">07 Seed en HDFS</text>
+  <text x="460" y="386" class="t2">Entrada: data/graph + master</text>
+  <text x="460" y="408" class="t2">Salida: /tmp/kddm/seed/*.json</text>
+  <text x="460" y="430" class="t2">Ej: edge TRK-002 - ZONE-M30</text>
+
+  <rect class="node" x="840" y="330" width="330" height="140"/>
+  <text x="860" y="360" class="t1">08 Spark batch - Hive</text>
+  <text x="860" y="386" class="t2">Entrada: raw + seed HDFS</text>
+  <text x="860" y="408" class="t2">Transforma: enrich + quality rules</text>
+  <text x="860" y="430" class="t2">Salida ORC: truck_positions</text>
+
+  <rect class="node" x="1240" y="330" width="330" height="140"/>
+  <text x="1260" y="360" class="t1">09 Spark streaming - Hive</text>
+  <text x="1260" y="386" class="t2">Entrada: topic gps_filtered</text>
+  <text x="1260" y="408" class="t2">Salida ORC: latest_positions</text>
+  <text x="1260" y="430" class="t2">Uso: mapa operativo tiempo real</text>
+
+  <rect class="node" x="1640" y="330" width="330" height="140"/>
+  <text x="1660" y="360" class="t1">10 Cassandra insights</text>
+  <text x="1660" y="386" class="t2">Entrada: salidas Spark</text>
+  <text x="1660" y="408" class="t2">Salida: latest_weather_insights</text>
+  <text x="1660" y="430" class="t2">Ej: zone=M30, risk=0.73</text>
+
+  <!-- Row 3 -->
+  <rect class="node" x="640" y="540" width="420" height="140"/>
+  <text x="660" y="570" class="t1">11 Entrenamiento IA y grafo</text>
+  <text x="660" y="596" class="t2">Entrada: Hive historico + topologia de rutas</text>
+  <text x="660" y="618" class="t2">Salida: /tmp/kddm/models/*.pkl + graph_features.parquet</text>
+  <text x="660" y="640" class="t2">Ej: prediccion ETA + riesgo congestion por tramo</text>
+
+  <rect class="node" x="1160" y="540" width="520" height="140"/>
+  <text x="1180" y="570" class="t1">12 Dashboard grafico (FastAPI + Dash)</text>
+  <text x="1180" y="596" class="t2">Lee: Hive (mapas/estadisticas), Cassandra (KPIs), modelos IA</text>
+  <text x="1180" y="618" class="t2">Visualiza: mapa de flota, alertas, metricas y recomendaciones</text>
+  <text x="1180" y="640" class="t2">Ej salida: camiones activos=128 | riesgo alto=11.7%</text>
+
+  <!-- Edges Row 1 -->
+  <path class="edge" d="M370 190 L440 190"/>
+  <text x="388" y="182" class="edgeLbl">CSV->JSON</text>
+  <path class="edge" d="M770 190 L840 190"/>
+  <text x="790" y="182" class="edgeLbl">join meteo</text>
+  <path class="edge" d="M1170 190 L1240 190"/>
+  <text x="1188" y="182" class="edgeLbl">raw json</text>
+  <path class="edge" d="M1570 190 L1640 190"/>
+  <text x="1588" y="182" class="edgeLbl">publish</text>
+
+  <!-- Down links -->
+  <path class="edge" d="M1805 260 L1805 330"/>
+  <text x="1816" y="300" class="edgeLbl">persist</text>
+  <path class="edge" d="M1805 470 L1680 540"/>
+  <text x="1718" y="517" class="edgeLbl">stats</text>
+  <path class="edge" d="M1030 470 L930 540"/>
+  <text x="940" y="516" class="edgeLbl">train</text>
+
+  <!-- Row2 links -->
+  <path class="edge" d="M370 400 L440 400"/>
+  <text x="386" y="392" class="edgeLbl">seed</text>
+  <path class="edge" d="M770 400 L840 400"/>
+  <text x="785" y="392" class="edgeLbl">batch</text>
+  <path class="edge" d="M1170 400 L1240 400"/>
+  <text x="1188" y="392" class="edgeLbl">stream</text>
+  <path class="edge" d="M1570 400 L1640 400"/>
+  <text x="1588" y="392" class="edgeLbl">upsert</text>
+
+  <!-- Final links -->
+  <path class="edge" d="M1060 610 L1160 610"/>
+  <text x="1088" y="602" class="edgeLbl">riesgo IA</text>
+  <path class="edge" d="M1430 470 L1430 540"/>
+  <text x="1440" y="510" class="edgeLbl">mapa</text>
+
+</svg>

@@ -1,0 +1,34 @@
+digraph DataLineage {
+  graph [rankdir=LR, bgcolor="white", pad="0.2", nodesep="0.5", ranksep="0.8", fontname="Helvetica", fontsize=18, label="Flujo general de datos (12 puntos auditables)", labelloc=t, labeljust=l];
+  node [shape=box, style="rounded,filled", fillcolor="#F8FAFC", color="#1E3A8A", penwidth=1.2, fontname="Helvetica", fontsize=10, margin="0.08,0.05"];
+  edge [color="#334155", penwidth=1.1, arrowsize=0.8, fontname="Helvetica", fontsize=9];
+
+  n1  [label=< <B>01 Origen maestro</B><BR/>data/master/trucks.csv<BR/>id=TRK-002;plate=1234ABC >, fillcolor="#E0F2FE"];
+  n2  [label=< <B>02 GPS sintético</B><BR/>scripts/gps_generator.py<BR/>-&gt; nifi/input/gps_data.jsonl >, fillcolor="#E0F2FE"];
+  n3  [label=< <B>03 Meteo raw</B><BR/>Open-Meteo API (JSON)<BR/>-&gt; nifi/raw-archive/weather/*.json >, fillcolor="#E0F2FE"];
+  n4  [label=< <B>04 Archivado NiFi</B><BR/>Split/Route JSON<BR/>-&gt; nifi/raw-archive/gps/*.json >, fillcolor="#E0F2FE"];
+  n5  [label=< <B>05 Kafka topics</B><BR/>gps_raw / gps_filtered<BR/>JSON linealizado >, fillcolor="#DBEAFE"];
+  n6  [label=< <B>06 Raw en HDFS</B><BR/>/tmp/kddm/raw/*.json<BR/>formato JSON >, fillcolor="#DBEAFE"];
+  n7  [label=< <B>07 Seed en HDFS</B><BR/>/tmp/kddm/seed/*.json<BR/>via ingest_hdfs_seed.py >, fillcolor="#DBEAFE"];
+  n8  [label=< <B>08 Spark batch</B><BR/>JSON -&gt; tablas Hive ORC<BR/>kddm_db.truck_positions >, fillcolor="#DCFCE7"];
+  n9  [label=< <B>09 Spark streaming</B><BR/>Kafka JSON -&gt; Hive ORC<BR/>kddm_db.latest_positions >, fillcolor="#DCFCE7"];
+  n10 [label=< <B>10 Cassandra</B><BR/>latest_weather_insights<BR/>PK: zone_id, ts >, fillcolor="#FEF3C7"];
+  n11 [label=< <B>11 Modelos IA/Grafo</B><BR/>HDFS models/*.pkl + graph/*.json<BR/>features: speed_avg, weather_risk >, fillcolor="#FCE7F3"];
+  n12 [label=< <B>12 Dashboard</B><BR/>FastAPI + Dash<BR/>mapas, KPIs, alertas >, fillcolor="#F1F5F9"];
+
+  n1 -> n2 [label="CSV -> JSONL"];
+  n2 -> n4 [label="ingesta GPS"];
+  n4 -> n5 [label="publish Kafka"];
+  n3 -> n5 [label="join por timestamp"];
+  n5 -> n6 [label="persist raw"];
+  n1 -> n7 [label="seed inicial"];
+  n6 -> n8 [label="batch ETL"];
+  n7 -> n8 [label="enriquecimiento"];
+  n5 -> n9 [label="stream ETL"];
+  n8 -> n10 [label="weather insights"];
+  n8 -> n11 [label="train datos historicos"];
+  n9 -> n10 [label="upsert near real-time"];
+  n10 -> n12 [label="stats tarjetas"];
+  n11 -> n12 [label="riesgo IA/grafo"];
+  n9 -> n12 [label="mapa operativo"];
+}

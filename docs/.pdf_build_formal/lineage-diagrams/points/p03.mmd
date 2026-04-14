@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real Open-Meteo: temperature_2m=18.7, precipitation=0.00, wind_speed_10m=5.6, weather_code=0"] --> B["Transformacion NiFi: InvokeHTTP + extraccion + normalizacion de atributos"] --> C["Salida real: raw-archive/weather JSON con temperature_c, precipitation_mm, wind_kmh"]

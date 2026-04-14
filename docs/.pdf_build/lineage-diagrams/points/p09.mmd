@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real Kafka filtered: GPS y weather JSON"] --> B["Transformacion streaming: parse, watermark 20m, dedupe, ventana 15m y agregacion"] --> C["Salida real: Hive delay_metrics_streaming y weather_observations_streaming + Cassandra latest state"]

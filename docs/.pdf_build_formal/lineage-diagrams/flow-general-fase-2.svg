@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1700" viewBox="0 0 1280 1700" role="img" aria-label="Flujo general fase 2 no lineal">
+  <defs>
+    <style>
+      .title { font: 700 43px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 25px Arial, sans-serif; fill: #334155; }
+      .node { fill: #f8fafc; stroke: #1e3a8a; stroke-width: 2.8; rx: 16; ry: 16; }
+      .t1 { font: 700 24px Arial, sans-serif; fill: #0f172a; }
+      .t2 { font: 500 19px Arial, sans-serif; fill: #1f2937; }
+      .edge { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arr); }
+      .edgeLbl { font: 700 16px Arial, sans-serif; fill: #334155; }
+    </style>
+    <marker id="arr" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#334155"/>
+    </marker>
+  </defs>
+
+  <text x="50" y="62" class="title">Fase 2: Procesamiento, IA y Consumo en Dashboard</text>
+  <text x="50" y="100" class="subtitle">Puntos 07-12 | ramificaciones batch/streaming hacia KPIs e IA</text>
+
+  <rect class="node" x="60" y="170" width="360" height="180"/>
+  <text x="84" y="208" class="t1">07 Seed en HDFS</text>
+  <text x="84" y="240" class="t2">Entrada: data/graph + master</text>
+  <text x="84" y="270" class="t2">Salida: /tmp/kddm/seed/*.json</text>
+  <text x="84" y="300" class="t2">Ej: edge TRK-002 - M30</text>
+
+  <rect class="node" x="460" y="170" width="360" height="180"/>
+  <text x="484" y="208" class="t1">08 Spark batch - Hive/ORC</text>
+  <text x="484" y="240" class="t2">Entrada: raw + seed</text>
+  <text x="484" y="270" class="t2">Salida: truck_positions</text>
+  <text x="484" y="300" class="t2">+ features historicas</text>
+
+  <rect class="node" x="860" y="170" width="360" height="180"/>
+  <text x="884" y="208" class="t1">09 Spark streaming - Hive</text>
+  <text x="884" y="240" class="t2">Entrada: gps_filtered</text>
+  <text x="884" y="270" class="t2">Salida: latest_positions</text>
+  <text x="884" y="300" class="t2">Uso: mapa en tiempo real</text>
+
+  <rect class="node" x="180" y="560" width="420" height="200"/>
+  <text x="206" y="600" class="t1">10 Cassandra low-latency</text>
+  <text x="206" y="634" class="t2">Entrada: batch + streaming</text>
+  <text x="206" y="666" class="t2">Salida: latest_weather_insights</text>
+  <text x="206" y="698" class="t2">Ej: zone=M30, risk=0.73</text>
+
+  <rect class="node" x="690" y="560" width="420" height="200"/>
+  <text x="716" y="600" class="t1">11 Modelos IA + grafo</text>
+  <text x="716" y="634" class="t2">Entrada: historico + red</text>
+  <text x="716" y="666" class="t2">Salida: /tmp/kddm/models/*.pkl</text>
+  <text x="716" y="698" class="t2">Ej: ETA_pred, risk_level</text>
+
+  <rect class="node" x="370" y="1000" width="540" height="220"/>
+  <text x="398" y="1042" class="t1">12 Dashboard (FastAPI + Dash)</text>
+  <text x="398" y="1078" class="t2">Lee Hive, Cassandra y scoring IA</text>
+  <text x="398" y="1110" class="t2">Mapas: flota activa y rutas</text>
+  <text x="398" y="1142" class="t2">KPIs: retrasos, meteo, cuellos de botella</text>
+  <text x="398" y="1174" class="t2">Ej UI: activos=128 | riesgo alto=11.7%</text>
+
+  <path class="edge" d="M420 260 L460 260"/>
+  <text x="428" y="248" class="edgeLbl">seed enrich</text>
+
+  <path class="edge" d="M820 260 L860 260"/>
+  <text x="828" y="248" class="edgeLbl">near real-time</text>
+
+  <path class="edge" d="M640 350 L640 440 L390 560"/>
+  <text x="652" y="418" class="edgeLbl">insights batch</text>
+
+  <path class="edge" d="M640 350 L640 500 L900 560"/>
+  <text x="666" y="540" class="edgeLbl">training IA</text>
+
+  <path class="edge" d="M1040 350 L1040 460 L430 460 L400 560"/>
+  <text x="860" y="440" class="edgeLbl">upsert estado</text>
+
+  <path class="edge" d="M1040 350 L1125 350 L1125 930 L700 930 L640 1000"/>
+  <text x="1050" y="680" class="edgeLbl">mapa operativo</text>
+
+  <path class="edge" d="M390 760 L390 900 L560 1000"/>
+  <text x="398" y="892" class="edgeLbl">KPIs</text>
+
+  <path class="edge" d="M900 760 L900 900 L700 1000"/>
+  <text x="914" y="882" class="edgeLbl">prediccion</text>
+</svg>

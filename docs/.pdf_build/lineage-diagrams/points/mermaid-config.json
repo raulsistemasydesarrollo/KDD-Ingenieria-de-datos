@@ -1,0 +1,21 @@
+{
+  "theme": "default",
+  "flowchart": {
+    "htmlLabels": true,
+    "curve": "basis",
+    "nodeSpacing": 70,
+    "rankSpacing": 90,
+    "padding": 18,
+    "useMaxWidth": false
+  },
+  "themeVariables": {
+    "fontFamily": "Arial, Helvetica, sans-serif",
+    "fontSize": "28px",
+    "primaryColor": "#f7fbff",
+    "primaryTextColor": "#0f172a",
+    "primaryBorderColor": "#1d4ed8",
+    "lineColor": "#1e293b",
+    "secondaryColor": "#eef2ff",
+    "tertiaryColor": "#f8fafc"
+  }
+}

@@ -1,0 +1,7 @@
+flowchart LR
+  O["Open-Meteo API"] --> H["NiFi InvokeHTTP"]
+  H --> X["Extract weather fields"]
+  X --> J["AttributesToJSON"]
+  J --> K1["Kafka transport.weather.raw"]
+  J --> K2["Kafka transport.weather.filtered"]
+  J --> A["raw-archive/weather"]

@@ -1,0 +1,14 @@
+flowchart LR
+  C1["Cassandra vehicle_latest_state"] --> API1["/api/vehicles/latest"]
+  C2["Cassandra weather_observations_recent"] --> API2["/api/weather/latest"]
+  C3["Cassandra network_insights_snapshots"] --> API3["/api/network/insights/history"]
+  H1["Hive and Spark outputs"] --> API4["/api/overview"]
+  G["graph csv + warehouses csv"] --> API5["/api/network/graph"]
+  R["routing engine"] --> API6["/api/network/best-route"]
+  M["model state and artifact"] --> API7["/api/ml/retrain/status"]
+
+  API1 --> UI["Mapa y tabla de flota"]
+  API2 --> UI2["Tabla clima y factor meteo"]
+  API5 --> UI3["Mapa de red y estadisticas"]
+  API6 --> UI4["Ruta optima y candidatas"]
+  API7 --> UI5["Bloque IA y reentreno"]

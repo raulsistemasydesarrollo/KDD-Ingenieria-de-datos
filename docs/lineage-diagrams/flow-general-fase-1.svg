@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1700" viewBox="0 0 1280 1700" role="img" aria-label="Flujo general fase 1 no lineal">
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 24px Arial, sans-serif; fill: #334155; }
+      .node { fill: #f8fafc; stroke: #1e3a8a; stroke-width: 2.8; rx: 16; ry: 16; }
+      .t1 { font: 700 24px Arial, sans-serif; fill: #0f172a; }
+      .t2 { font: 500 19px Arial, sans-serif; fill: #1f2937; }
+      .edge { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arr); }
+      .edgeLbl { font: 700 17px Arial, sans-serif; fill: #334155; }
+    </style>
+    <marker id="arr" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#334155"/>
+    </marker>
+  </defs>
+
+  <text x="50" y="62" class="title">Fase 1: Captura, Ingesta y Persistencia Raw</text>
+  <text x="50" y="100" class="subtitle">Puntos 01-06 | flujo con derivaciones entre GPS, meteo, NiFi y Kafka</text>
+
+  <rect class="node" x="50" y="160" width="360" height="180"/>
+  <text x="74" y="198" class="t1">01 Origen maestro (CSV)</text>
+  <text x="74" y="230" class="t2">Entrada: data/master/trucks.csv</text>
+  <text x="74" y="260" class="t2">Ej: TRK-002,1234ABC,Euro6</text>
+  <text x="74" y="290" class="t2">Salida: catalogo normalizado</text>
+
+  <rect class="node" x="460" y="160" width="360" height="180"/>
+  <text x="484" y="198" class="t1">02 GPS generator (JSONL)</text>
+  <text x="484" y="230" class="t2">Entrada: maestro + rutas</text>
+  <text x="484" y="260" class="t2">Salida: nifi/input/gps_data.jsonl</text>
+  <text x="484" y="290" class="t2">Ej: truck=TRK-002, delay=11</text>
+
+  <rect class="node" x="870" y="160" width="360" height="180"/>
+  <text x="894" y="198" class="t1">03 Meteo API raw (JSON)</text>
+  <text x="894" y="230" class="t2">Entrada: Open-Meteo API</text>
+  <text x="894" y="260" class="t2">Salida: raw-archive/weather/*.json</text>
+  <text x="894" y="290" class="t2">Ej: temp=18.2, wind=12.4</text>
+
+  <rect class="node" x="180" y="520" width="420" height="200"/>
+  <text x="206" y="560" class="t1">04 NiFi archivo GPS raw</text>
+  <text x="206" y="594" class="t2">Transforma: split, parse, validacion</text>
+  <text x="206" y="626" class="t2">Salida: raw-archive/gps/*.json</text>
+  <text x="206" y="658" class="t2">Ej: gps_evt_...json (1 evento)</text>
+
+  <rect class="node" x="690" y="520" width="420" height="200"/>
+  <text x="716" y="560" class="t1">05 Kafka topics raw/filtered</text>
+  <text x="716" y="594" class="t2">Regla: delay_minutes &gt;= 5</text>
+  <text x="716" y="626" class="t2">Salida: gps_raw, gps_filtered, weather_raw</text>
+  <text x="716" y="658" class="t2">Formato: JSON en value</text>
+
+  <rect class="node" x="370" y="980" width="540" height="210"/>
+  <text x="398" y="1020" class="t1">06 Persistencia raw en HDFS</text>
+  <text x="398" y="1056" class="t2">Salida: /tmp/kddm/raw/*.json</text>
+  <text x="398" y="1088" class="t2">Uso: historico auditable y reproceso</text>
+  <text x="398" y="1120" class="t2">Ej: raw/gps/2026-04-14/*.json</text>
+
+  <path class="edge" d="M410 250 L460 250"/>
+  <text x="420" y="238" class="edgeLbl">catalogo base</text>
+
+  <path class="edge" d="M640 340 L390 520"/>
+  <text x="456" y="432" class="edgeLbl">stream GPS</text>
+
+  <path class="edge" d="M1050 340 L900 520"/>
+  <text x="940" y="432" class="edgeLbl">stream meteo</text>
+
+  <path class="edge" d="M600 620 L690 620"/>
+  <text x="620" y="608" class="edgeLbl">publish</text>
+
+  <path class="edge" d="M900 720 L660 980"/>
+  <text x="740" y="860" class="edgeLbl">sink raw</text>
+
+  <path class="edge" d="M390 720 L560 980"/>
+  <text x="430" y="860" class="edgeLbl">raw backup</text>
+</svg>

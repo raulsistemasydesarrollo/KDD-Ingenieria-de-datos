@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>data-lineage-empresa-extendida</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="/work/docs/.pdf_build_formal/pdf-print.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">data-lineage-empresa-extendida</h1>
+</header>
+<h1 id="trazabilidad-end-to-end-del-dato">Trazabilidad End-to-End del
+Dato</h1>
+<h2
+id="plataforma-kdd-logistica---documento-ejecutivo-y-tecnico">Plataforma
+KDD Logistica - Documento Ejecutivo y Tecnico</h2>
+<p>Version: 2.0<br />
+Fecha: 14/04/2026<br />
+Ambito: Ingesta, transformacion, almacenamiento, analitica, grafos/IA y
+consumo en dashboard</p>
+<hr />
+<h2 id="resumen-ejecutivo">1) Resumen ejecutivo</h2>
+<p>Este documento describe de forma auditada como un dato logistico
+recorre la plataforma desde su captura inicial hasta su visualizacion en
+mapas, estadisticas operativas y componentes de IA.</p>
+<p>El recorrido esta estructurado en 12 puntos de control, y en cada
+punto se documenta: 1. De donde sale el dato. 2. Como se transforma. 3.
+Donde se guarda. 4. En que formato queda. 5. Un ejemplo real de entrada
+y de salida. 6. Un script para demostrarlo en vivo.</p>
+<hr />
+<div style="page-break-before: always;">
+
+</div>
+<h2 id="flujo-general-vision-de-direccion">2) Flujo general (vision de
+direccion)</h2>
+<h3 id="fase-1---captura-ingesta-y-persistencia-raw">Fase 1 - Captura,
+ingesta y persistencia raw</h3>
+<figure>
+<img src="./lineage-diagrams/flow-general-fase-1.svg"
+alt="Flujo general fase 1" />
+<figcaption aria-hidden="true">Flujo general fase 1</figcaption>
+</figure>
+<div style="page-break-after: always;">
+
+</div>
+<h3 id="fase-2---procesamiento-ia-y-consumo-en-dashboard">Fase 2 -
+Procesamiento, IA y consumo en dashboard</h3>
+<figure>
+<img src="./lineage-diagrams/flow-general-fase-2.svg"
+alt="Flujo general fase 2" />
+<figcaption aria-hidden="true">Flujo general fase 2</figcaption>
+</figure>
+<hr />
+<h2 id="matriz-de-linaje-12-puntos-auditables">3) Matriz de linaje (12
+puntos auditables)</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Punto</th>
+<th>Origen</th>
+<th>Transformacion principal</th>
+<th>Destino</th>
+<th>Formato destino</th>
+<th>Script de evidencia</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01</td>
+<td><code>data/master</code>, <code>data/graph</code></td>
+<td>Normalizacion catalogos</td>
+<td>Spark + Dashboard</td>
+<td>CSV (fuente)</td>
+<td><code>scripts/data_lineage/01_origen_maestros_locales.sh</code></td>
+</tr>
+<tr>
+<td>02</td>
+<td><code>gps-generator</code></td>
+<td>Emision continua de telemetria</td>
+<td><code>nifi/input</code></td>
+<td>JSONL</td>
+<td><code>scripts/data_lineage/02_ingesta_gps_nifi_input.sh</code></td>
+</tr>
+<tr>
+<td>03</td>
+<td>Open-Meteo</td>
+<td>Extraccion NiFi de campos meteo</td>
+<td><code>nifi/raw-archive/weather</code></td>
+<td>JSON</td>
+<td><code>scripts/data_lineage/03_ingesta_weather_nifi_raw_archive.sh</code></td>
+</tr>
+<tr>
+<td>04</td>
+<td>NiFi GPS flow</td>
+<td>Split + parse + nombre unico UUID</td>
+<td><code>nifi/raw-archive/gps</code></td>
+<td>JSON por evento</td>
+<td><code>scripts/data_lineage/04_nifi_raw_archive_gps.sh</code></td>
+</tr>
+<tr>
+<td>05</td>
+<td>NiFi PublishKafka</td>
+<td>Enrutado raw/filtered</td>
+<td>Kafka topics</td>
+<td>JSON en <code>value</code></td>
+<td><code>scripts/data_lineage/05_kafka_topics_raw_y_filtrados.sh</code></td>
+</tr>
+<tr>
+<td>06</td>
+<td><code>raw-hdfs-loader</code></td>
+<td>Sincronizacion con timestamp</td>
+<td>HDFS raw NiFi</td>
+<td>JSON/JSONL</td>
+<td><code>scripts/data_lineage/06_hdfs_raw_nifi.sh</code></td>
+</tr>
+<tr>
+<td>07</td>
+<td>Seed local</td>
+<td>Carga inicial HDFS</td>
+<td>HDFS raw/master/graph</td>
+<td>JSONL + CSV</td>
+<td><code>scripts/data_lineage/07_hdfs_seed_batch_input.sh</code></td>
+</tr>
+<tr>
+<td>08</td>
+<td>Spark batch</td>
+<td>Limpieza + enriquecimiento + grafos + ML</td>
+<td>Hive + HDFS modelo</td>
+<td>Tablas Hive + artefacto</td>
+<td><code>scripts/data_lineage/08_hive_batch_grafo_ml.sh</code></td>
+</tr>
+<tr>
+<td>09</td>
+<td>Spark streaming</td>
+<td>Parse + watermark + dedupe + ventanas</td>
+<td>Hive streaming + Cassandra</td>
+<td>Tablas Hive/Cassandra</td>
+<td><code>scripts/data_lineage/09_hive_streaming_y_vistas_madrid.sh</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td>Spark + dashboard backend</td>
+<td>Persistencia operacional</td>
+<td>Cassandra</td>
+<td>CQL tables</td>
+<td><code>scripts/data_lineage/10_cassandra_operacional.sh</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td>Pipeline ML</td>
+<td>Seleccion modelo por RMSE</td>
+<td>HDFS + Hive scoring</td>
+<td>Modelo + tabla scoring</td>
+<td><code>scripts/data_lineage/11_modelo_ia_y_artifacto_hdfs.sh</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td>APIs dashboard</td>
+<td>Filtros/routing/KPIs</td>
+<td>Frontend visual</td>
+<td>JSON API -&gt; UI</td>
+<td><code>scripts/data_lineage/12_dashboard_fuentes_y_consumo.sh</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="trazabilidad-detallada-por-punto-con-evidencia-real">4)
+Trazabilidad detallada por punto (con evidencia real)</h2>
+<h3 id="punto-01---datos-maestros-y-topologia-de-red">Punto 01 - Datos
+maestros y topologia de red</h3>
+<p><strong>Grafico Punto 01 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p01.svg" alt="Grafico punto 01" />
+<figcaption aria-hidden="true">Grafico punto 01</figcaption>
+</figure>
+<ul>
+<li>Fuente: <code>data/master/warehouses.csv</code>,
+<code>data/master/vehicles.csv</code>,
+<code>data/graph/vertices.csv</code>,
+<code>data/graph/edges.csv</code></li>
+<li>Ejemplo real entrada:
+<code>MAD,Madrid Hub,ES,South Europe,high,40.4168,-3.7038</code></li>
+<li>Ejemplo real salida (campo normalizado):
+<code>warehouse_id=MAD</code>, <code>warehouse_name=Madrid Hub</code>,
+<code>criticality=high</code></li>
+<li>Script:
+<code>scripts/data_lineage/01_origen_maestros_locales.sh</code></li>
+</ul>
+<h3 id="punto-02---ingesta-gps-inicial">Punto 02 - Ingesta GPS
+inicial</h3>
+<p><strong>Grafico Punto 02 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p02.svg" alt="Grafico punto 02" />
+<figcaption aria-hidden="true">Grafico punto 02</figcaption>
+</figure>
+<ul>
+<li>Fuente: <code>gps-generator</code></li>
+<li>Formato salida: JSONL</li>
+<li>Ejemplo real entrada: <code>vehicle_id=TRUCK-009</code>,
+<code>delay_minutes=11</code>,
+<code>event_time=2026-04-13T21:48:32Z</code></li>
+<li>Ejemplo real salida: fichero <code>gps_20260413T214832Z.jsonl</code>
+en <code>nifi/input</code></li>
+<li>Script:
+<code>scripts/data_lineage/02_ingesta_gps_nifi_input.sh</code></li>
+</ul>
+<h3 id="punto-03---ingesta-meteorologica-raw">Punto 03 - Ingesta
+meteorologica raw</h3>
+<p><strong>Grafico Punto 03 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p03.svg" alt="Grafico punto 03" />
+<figcaption aria-hidden="true">Grafico punto 03</figcaption>
+</figure>
+<ul>
+<li>Fuente: Open-Meteo via NiFi</li>
+<li>Formato salida: JSON</li>
+<li>Ejemplo real entrada: <code>temperature_2m=18.7</code>,
+<code>wind_speed_10m=5.6</code></li>
+<li>Ejemplo real salida: snapshot en
+<code>nifi/raw-archive/weather/*</code></li>
+<li>Script:
+<code>scripts/data_lineage/03_ingesta_weather_nifi_raw_archive.sh</code></li>
+</ul>
+<h3 id="punto-04---raw-gps-archivado-por-nifi">Punto 04 - Raw GPS
+archivado por NiFi</h3>
+<p><strong>Grafico Punto 04 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p04.svg" alt="Grafico punto 04" />
+<figcaption aria-hidden="true">Grafico punto 04</figcaption>
+</figure>
+<ul>
+<li>Fuente: flujo GPS NiFi</li>
+<li>Formato salida: JSON por evento</li>
+<li>Ejemplo real salida:
+<code>gps_..._77890958-707f-46cc-944c-986dc36b2f1d.jsonl</code></li>
+<li>Script:
+<code>scripts/data_lineage/04_nifi_raw_archive_gps.sh</code></li>
+</ul>
+<h3 id="punto-05---bus-kafka-raw-y-filtered">Punto 05 - Bus Kafka raw y
+filtered</h3>
+<p><strong>Grafico Punto 05 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p05.svg" alt="Grafico punto 05" />
+<figcaption aria-hidden="true">Grafico punto 05</figcaption>
+</figure>
+<ul>
+<li>Topics: <code>transport.raw</code>, <code>transport.filtered</code>,
+<code>transport.weather.raw</code>,
+<code>transport.weather.filtered</code></li>
+<li>Transformacion clave: enrutado por regla de retraso</li>
+<li>Script:
+<code>scripts/data_lineage/05_kafka_topics_raw_y_filtrados.sh</code></li>
+</ul>
+<h3 id="punto-06---raw-nifi-en-hdfs">Punto 06 - Raw NiFi en HDFS</h3>
+<p><strong>Grafico Punto 06 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p06.svg" alt="Grafico punto 06" />
+<figcaption aria-hidden="true">Grafico punto 06</figcaption>
+</figure>
+<ul>
+<li>Destino HDFS: <code>/data/raw/nifi/gps</code>,
+<code>/data/raw/nifi/weather</code></li>
+<li>Objetivo: trazabilidad y reproceso raw</li>
+<li>Script: <code>scripts/data_lineage/06_hdfs_raw_nifi.sh</code></li>
+</ul>
+<h3 id="punto-07---seed-batch-en-hdfs">Punto 07 - Seed batch en
+HDFS</h3>
+<p><strong>Grafico Punto 07 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p07.svg" alt="Grafico punto 07" />
+<figcaption aria-hidden="true">Grafico punto 07</figcaption>
+</figure>
+<ul>
+<li>Entrada batch oficial Spark:
+<code>hdfs://hadoop:9000/data/raw/gps_events.jsonl</code></li>
+<li>Script:
+<code>scripts/data_lineage/07_hdfs_seed_batch_input.sh</code></li>
+</ul>
+<h3 id="punto-08---spark-batch-enriquecimiento-grafos-e-ia">Punto 08 -
+Spark batch: enriquecimiento, grafos e IA</h3>
+<p><strong>Grafico Punto 08 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p08.svg" alt="Grafico punto 08" />
+<figcaption aria-hidden="true">Grafico punto 08</figcaption>
+</figure>
+<ul>
+<li>Tablas Hive de salida: <code>enriched_events</code>,
+<code>delay_metrics_batch</code>, <code>route_graph_metrics</code>,
+<code>route_shortest_paths</code>,
+<code>ml_delay_risk_scores</code></li>
+<li>Ejemplo transformado: <code>event_time</code> string -&gt;
+<code>event_timestamp</code> tipado</li>
+<li>Script:
+<code>scripts/data_lineage/08_hive_batch_grafo_ml.sh</code></li>
+</ul>
+<h3 id="punto-09---spark-streaming-operacional">Punto 09 - Spark
+streaming operacional</h3>
+<p><strong>Grafico Punto 09 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p09.svg" alt="Grafico punto 09" />
+<figcaption aria-hidden="true">Grafico punto 09</figcaption>
+</figure>
+<ul>
+<li>Controles tecnicos: watermark 20 minutos, dedupe por
+<code>event_id</code> y <code>weather_event_id</code></li>
+<li>Vistas de negocio: <code>v_delay_metrics_streaming_madrid</code>,
+<code>v_weather_observations_madrid</code></li>
+<li>Script:
+<code>scripts/data_lineage/09_hive_streaming_y_vistas_madrid.sh</code></li>
+</ul>
+<h3 id="punto-10---cassandra-de-baja-latencia">Punto 10 - Cassandra de
+baja latencia</h3>
+<p><strong>Grafico Punto 10 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p10.svg" alt="Grafico punto 10" />
+<figcaption aria-hidden="true">Grafico punto 10</figcaption>
+</figure>
+<ul>
+<li>Tablas operativas: <code>vehicle_latest_state</code>,
+<code>weather_observations_recent</code>,
+<code>network_insights_snapshots</code>,
+<code>model_retrain_state</code></li>
+<li>Script:
+<code>scripts/data_lineage/10_cassandra_operacional.sh</code></li>
+</ul>
+<h3 id="punto-11---modelo-ia-y-scoring">Punto 11 - Modelo IA y
+scoring</h3>
+<p><strong>Grafico Punto 11 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p11.svg" alt="Grafico punto 11" />
+<figcaption aria-hidden="true">Grafico punto 11</figcaption>
+</figure>
+<ul>
+<li>Criterio de seleccion: menor RMSE en test</li>
+<li>Artefacto final:
+<code>hdfs://hadoop:9000/models/delay_risk_rf</code></li>
+<li>Script:
+<code>scripts/data_lineage/11_modelo_ia_y_artifacto_hdfs.sh</code></li>
+</ul>
+<h3 id="punto-12---consumo-final-dashboard">Punto 12 - Consumo final
+dashboard</h3>
+<p><strong>Grafico Punto 12 (entrada -&gt; transformacion -&gt;
+salida)</strong></p>
+<figure>
+<img src="./lineage-diagrams/points/p12.svg" alt="Grafico punto 12" />
+<figcaption aria-hidden="true">Grafico punto 12</figcaption>
+</figure>
+<ul>
+<li>Fuentes preferidas dashboard: Cassandra</li>
+<li>Fallback dashboard: <code>nifi/input</code> y
+<code>nifi/raw-archive/weather</code></li>
+<li>Script:
+<code>scripts/data_lineage/12_dashboard_fuentes_y_consumo.sh</code></li>
+</ul>
+<hr />
+<h2 id="datos-relevantes-adicionales-para-direccion">5) Datos relevantes
+adicionales para direccion</h2>
+<h3 id="controles-de-calidad-y-consistencia-ya-implementados">5.1
+Controles de calidad y consistencia ya implementados</h3>
+<ol type="1">
+<li>Dedupe por identificador de evento (<code>event_id</code>,
+<code>weather_event_id</code>).</li>
+<li>Watermark de 20 minutos para tolerancia a eventos tardios.</li>
+<li>Ventanas de 15 minutos para KPIs operativos consistentes.</li>
+<li>Vistas de negocio en zona horaria Madrid
+(<code>from_utc_timestamp</code>).</li>
+<li>Fallback de persistencia a Parquet si Hive no esta disponible.</li>
+<li>Fallback de lectura dashboard a ficheros NiFi si Cassandra cae.</li>
+</ol>
+<h3 id="indicadores-de-salud-operativa-recomendados">5.2 Indicadores de
+salud operativa recomendados</h3>
+<ol type="1">
+<li>Freshness de flota (<code>vehicle_latest_state</code>) menor de 900
+segundos.</li>
+<li>Presencia de tablas clave en <code>transport_analytics</code>.</li>
+<li>Disponibilidad de topics Kafka esperados.</li>
+<li>Existencia de artefacto de modelo en
+<code>/models/delay_risk_rf</code>.</li>
+</ol>
+<h3 id="riesgos-y-mitigaciones">5.3 Riesgos y mitigaciones</h3>
+<ol type="1">
+<li>Riesgo: caida temporal de Cassandra. Mitigacion: fallback de lectura
+a ficheros NiFi en dashboard.</li>
+<li>Riesgo: incompatibilidad temporal Hive metastore. Mitigacion:
+fallback a Parquet en rutas <code>/data/curated/*_streaming</code>.</li>
+<li>Riesgo: duplicados por reintentos en ingesta. Mitigacion: dedupe en
+Spark por claves de evento.</li>
+</ol>
+<hr />
+<h2 id="guia-de-demostracion-ejecutiva-10-15-min">6) Guia de
+demostracion ejecutiva (10-15 min)</h2>
+<ol type="1">
+<li>Ejecutar
+<code>./scripts/data_lineage/01_origen_maestros_locales.sh</code> y
+mostrar origen maestro.</li>
+<li>Ejecutar
+<code>./scripts/data_lineage/02_ingesta_gps_nifi_input.sh</code> y
+<code>03_ingesta_weather_nifi_raw_archive.sh</code>.</li>
+<li>Ejecutar
+<code>./scripts/data_lineage/05_kafka_topics_raw_y_filtrados.sh</code>
+para evidenciar bus de eventos.</li>
+<li>Ejecutar
+<code>./scripts/data_lineage/08_hive_batch_grafo_ml.sh</code> para
+evidenciar valor analitico y de IA.</li>
+<li>Ejecutar
+<code>./scripts/data_lineage/10_cassandra_operacional.sh</code> para
+latencia operacional.</li>
+<li>Ejecutar
+<code>./scripts/data_lineage/12_dashboard_fuentes_y_consumo.sh</code>
+para cierre visual de negocio.</li>
+</ol>
+<p>Ejecucion completa automatica:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/data_lineage/00_run_all.sh</span></span></code></pre></div>
+</body>
+</html>

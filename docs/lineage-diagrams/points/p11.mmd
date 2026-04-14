@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real entrenamiento: speed_kmh, vehicle_type, climate_temperature_c, congestion_avg_delay_minutes"] --> B["Transformacion ML: compara baseline_rf, tuned_baseline_rf, enhanced_rf y elige menor RMSE"] --> C["Salida real: /models/delay_risk_rf y tabla ml_delay_risk_scores con risk_level"]

@@ -1,0 +1,9 @@
+flowchart LR
+  G["gps-generator"] --> I["nifi/input/gps_*.jsonl"]
+  I --> L["NiFi ListFile y FetchFile"]
+  L --> S["SplitText 1 linea"]
+  S --> E["EvaluateJsonPath"]
+  E --> R["RouteOnAttribute delay >= 5"]
+  R --> K1["Kafka transport.raw"]
+  R --> K2["Kafka transport.filtered"]
+  R --> A["raw-archive/gps"]

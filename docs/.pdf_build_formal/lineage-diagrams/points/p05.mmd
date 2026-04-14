@@ -1,0 +1,3 @@
+flowchart LR
+  A["Entrada real evento: vehicle_id=TRUCK-019, delay_minutes=8"] --> B["Regla NiFi: delay_minutes >= 5 para topic filtered"] --> C1["Salida real raw: topic transport.raw (todos los eventos)"]
+  B --> C2["Salida real filtered: topic transport.filtered (solo retrasos >= 5)"]

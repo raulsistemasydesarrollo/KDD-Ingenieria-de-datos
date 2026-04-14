@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real GPS: event_id=gps_evt_1776117255, vehicle_id=TRUCK-009, warehouse_id=ZAR, delay_minutes=11"] --> B["Transformacion: gps-generator serializa JSON y escribe 1 linea por evento"] --> C["Salida real: nifi/input/gps_20260413T214832Z.jsonl con eventos JSONL"]

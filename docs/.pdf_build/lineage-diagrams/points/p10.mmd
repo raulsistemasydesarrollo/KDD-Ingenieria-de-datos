@@ -1,0 +1,2 @@
+flowchart LR
+  A["Entrada real estado: vehicle_id=TRUCK-009, warehouse_id=ZAR, delay_minutes=11, speed_kmh=83.73"] --> B["Transformacion Cassandra: escritura por clave y snapshot operativo de baja latencia"] --> C["Salida real tablas: vehicle_latest_state, weather_observations_recent, network_insights_snapshots"]

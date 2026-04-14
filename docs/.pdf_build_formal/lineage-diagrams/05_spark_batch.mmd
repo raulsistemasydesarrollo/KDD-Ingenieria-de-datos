@@ -1,0 +1,12 @@
+flowchart LR
+  H["HDFS /data/raw/gps_events.jsonl"] --> C["clean and normalize"]
+  C --> D["dedupe event_id"]
+  D --> E["join maestros"]
+  E --> T1["Hive enriched_events"]
+  E --> T2["Hive delay_metrics_batch"]
+  E --> G["GraphFrames"]
+  G --> T3["Hive route_graph_metrics"]
+  G --> T4["Hive route_shortest_paths"]
+  E --> M["ML delay risk"]
+  M --> T5["Hive ml_delay_risk_scores"]
+  M --> P["HDFS /models/delay_risk_rf"]
