@@ -113,6 +113,15 @@ for _ in $(seq 1 40); do
 done
 
 echo
+echo "Esperando Airflow en http://localhost:8080 ..."
+if ! wait_for_http "Airflow health" "http://localhost:8080/health" "200" 60 3; then
+  echo "[WARN] Airflow /health no respondio dentro del timeout."
+fi
+if ! wait_for_http "Airflow UI" "http://localhost:8080" "200 302" 40 3; then
+  echo "[WARN] Airflow UI no respondio dentro del timeout."
+fi
+
+echo
 echo "Estado de servicios:"
 sg docker -c "docker compose ps"
 
