@@ -53,6 +53,9 @@ const state = {
   retrainAdvice: null,
   retrainModelInfo: null,
   retrainScheduleInfo: null,
+  platformStatus: null,
+  cleanupAutoArmed: true,
+  cleanupAutoInFlight: false,
   routeCalcDebounceTimer: null,
   lastOverview: null,
   lastOverviewLiveEdgeSummary: null
@@ -364,8 +367,7 @@ function renderOverview(overview, liveEdgeSummary = null) {
   state.lastOverview = overview || null;
   state.lastOverviewLiveEdgeSummary = liveEdgeSummary || null;
   const cards = [
-    ["Vehiculos activos", overview.vehicles_active],
-    ["Eventos cargados", overview.events_loaded],
+    ["Vehiculos / eventos", `${overview.vehicles_active} / ${overview.events_loaded}`],
     ["Delay medio (min)", fmt.n(overview.avg_delay_minutes, 1)],
     ["Velocidad media (km/h)", fmt.n(overview.avg_speed_kmh, 1)],
     ["Factor meteo", fmt.n(overview.weather_factor, 2)],
@@ -379,6 +381,10 @@ function renderOverview(overview, liveEdgeSummary = null) {
   if (Number.isFinite(retrainScore)) {
     cards.push(["Riesgo de deriva IA", `${Math.round(retrainScore)}/100`]);
     cards.push(["Reentreno", state.retrainAdvice?.recommended ? "RECOMENDADO" : "NO necesario"]);
+  }
+  if (state.platformStatus) {
+    const sparkState = String(state.platformStatus.spark_streaming?.state || "UNKNOWN").toUpperCase();
+    cards.push(["Spark Streaming", sparkState]);
   }
   document.getElementById("overview-cards").innerHTML = cards
     .map(([title, value]) => `<article class=\"card\"><h4>${title}</h4><div class=\"big\">${value}</div></article>`)
@@ -401,10 +407,51 @@ function sourceLabel(source) {
 function renderDataSources(vehicleSource, weatherSource) {
   const container = document.getElementById("data-source-badges");
   if (!container) return;
+  const sparkState = String(state.platformStatus?.spark_streaming?.state || "UNKNOWN").toUpperCase();
+  const yarnState = String(state.platformStatus?.yarn_node?.state || "UNKNOWN").toUpperCase();
+  const diskLevel = String(state.platformStatus?.hdfs_disk?.status || "unknown");
+  const dagToneClass = levelClass(diskLevel);
+  const dagLink = state.platformStatus?.links?.airflow_cleanup_dag || "http://localhost:8080/dags/kdd_daily_disk_cleanup/grid";
+  const hasPlatformStatus = !!state.platformStatus;
   container.innerHTML = `
     <span class="source-badge ${sourceClass(vehicleSource)}">Vehiculos: ${sourceLabel(vehicleSource)}</span>
     <span class="source-badge ${sourceClass(weatherSource)}">Clima: ${sourceLabel(weatherSource)}</span>
+    ${hasPlatformStatus ? `<span class="status-badge ${levelClass(sparkState.toLowerCase())}">Spark: ${sparkState}</span>` : ""}
+    ${hasPlatformStatus ? `<span class="status-badge ${levelClass(yarnState.toLowerCase())}">YARN nodo: ${yarnState}</span>` : ""}
+    ${hasPlatformStatus ? `<a class="status-link ${dagToneClass}" href="${dagLink}" target="_blank" rel="noreferrer">DAG limpieza</a>` : ""}
   `;
+}
+
+async function maybeAutoTriggerCleanup(platformStatus) {
+  if (!platformStatus || state.cleanupAutoInFlight) return;
+  const hdfsUse = Number(platformStatus.hdfs_disk?.use_percent);
+  const threshold = Number(platformStatus.cleanup_policy?.disk_threshold_percent || 88);
+  if (!Number.isFinite(hdfsUse) || !Number.isFinite(threshold)) return;
+
+  if (hdfsUse < threshold) {
+    state.cleanupAutoArmed = true;
+    return;
+  }
+  if (!state.cleanupAutoArmed) return;
+
+  state.cleanupAutoInFlight = true;
+  try {
+    await fetchJson("/api/platform/cleanup/trigger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trigger: "auto_hdfs_threshold_dashboard" })
+    });
+    state.cleanupAutoArmed = false;
+  } catch (err) {
+    // Si hay conflicto por cooldown/running lo tratamos como trigger gestionado.
+    if (String(err?.message || "").includes("Error 409")) {
+      state.cleanupAutoArmed = false;
+    } else {
+      console.warn("No se pudo auto-disparar limpieza:", err);
+    }
+  } finally {
+    state.cleanupAutoInFlight = false;
+  }
 }
 
 function renderFleetFreshness(latestEventTime) {
@@ -425,6 +472,36 @@ function renderFleetFreshness(latestEventTime) {
 
   el.className = `fleet-freshness ${statusClass}`;
   el.textContent = `Flota: ultimo evento ${fmt.dt(latestEventTime)} (${ageSec}s de antiguedad)`;
+}
+
+function levelClass(level) {
+  const raw = String(level || "").toLowerCase();
+  if (raw === "ok" || raw === "running" || raw === "success" || raw === "healthy") return "status-ok";
+  if (raw === "warn" || raw === "warning" || raw === "accepted") return "status-warn";
+  if (raw === "critical" || raw === "error" || raw === "failed" || raw === "unhealthy") return "status-bad";
+  return "status-neutral";
+}
+
+function renderPlatformStatus(platformStatus) {
+  const container = document.getElementById("platform-status-badges");
+  if (!container) return;
+  if (!platformStatus) {
+    container.innerHTML = `<span class="status-badge status-neutral">Plataforma: sin datos</span>`;
+    return;
+  }
+
+  const hdfsUse = Number(platformStatus.hdfs_disk?.use_percent);
+  const diskLevel = String(platformStatus.hdfs_disk?.status || "unknown");
+  const dagState = String(platformStatus.cleanup_policy?.last_dag_run?.state || "unknown").toUpperCase();
+  const lastCleanupAt = platformStatus.cleanup_policy?.last_local_cleanup?.updated_at;
+
+  container.innerHTML = `
+    <span class="status-badge ${levelClass(diskLevel)}">HDFS disco: ${Number.isFinite(hdfsUse) ? `${hdfsUse}%` : "-"}</span>
+    <span class="status-badge ${levelClass(dagState.toLowerCase())}">Limpieza DAG: ${dagState}</span>
+    <span class="status-badge status-neutral">Ultima limpieza local: ${lastCleanupAt ? fmt.dt(lastCleanupAt) : "-"}</span>
+    <a class="status-link" href="${platformStatus.links?.yarn_running_apps || "http://localhost:8088/cluster/apps/RUNNING"}" target="_blank" rel="noreferrer">YARN</a>
+    <a class="status-link" href="${platformStatus.links?.spark_history || "http://localhost:18080"}" target="_blank" rel="noreferrer">Spark History</a>
+  `;
 }
 
 function renderVehicleTable(items) {
@@ -2121,9 +2198,12 @@ async function refreshFleet() {
   const visibleItems = resolveVisibleVehicles(latestRes.items);
 
   state.liveEdgeSummary = overviewRes.live_edge_summary || null;
+  state.platformStatus = overviewRes.platform_status || null;
   renderOverview(overviewRes.overview, state.liveEdgeSummary);
   renderDataSources(overviewRes.vehicle_source, overviewRes.weather_source);
   renderFleetFreshness(overviewRes.overview.latest_event_time);
+  renderPlatformStatus(state.platformStatus);
+  void maybeAutoTriggerCleanup(state.platformStatus);
   renderVehicleTable(visibleItems);
   renderWeather(state.route ? routeAdjustedWeather(weatherRes.items, state.route) : weatherRes.items);
   updateMarkers(visibleItems);
@@ -2274,11 +2354,14 @@ async function calculateRoute() {
     state.vehicles = visibleItems;
     renderWeather(routeAdjustedWeather(weatherRes.items, state.route));
     state.liveEdgeSummary = result.live_edge_summary || overviewRes.live_edge_summary || state.liveEdgeSummary;
+    state.platformStatus = overviewRes.platform_status || state.platformStatus;
     state.networkInsights = graphRes.network_insights || state.networkInsights;
     state.insightsHistory = historyRes || state.insightsHistory;
     renderOverview(overviewRes.overview, state.liveEdgeSummary);
     renderDataSources(overviewRes.vehicle_source, overviewRes.weather_source);
     renderFleetFreshness(overviewRes.overview.latest_event_time);
+    renderPlatformStatus(state.platformStatus);
+    void maybeAutoTriggerCleanup(state.platformStatus);
     renderVehicleTable(visibleItems);
     updateMarkers(visibleItems);
     hydrateVehicleSelect(visibleItems);

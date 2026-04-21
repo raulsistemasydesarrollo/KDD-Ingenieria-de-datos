@@ -20,6 +20,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   - `transport_analytics.network_insights_snapshots_hive`
   - `transport_analytics.network_insights_hourly_trends`
 - Script `scripts/rebuild_graph_edges_by_proximity.py` para regenerar aristas por cercania geografica con reglas de negocio.
+- Nuevo endpoint de limpieza operativa en dashboard:
+  - `POST /api/platform/cleanup/trigger`
+  - ejecuta limpieza segura asincrona con lock y cooldown.
 
 ### Changed
 
@@ -62,6 +65,13 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   - `POST /api/ml/retrain`
   - `GET /api/ml/retrain/status`
 - Persistencia del estado/recomendacion de reentreno en Cassandra (`transport.model_retrain_state`).
+- Dashboard actualizado (21/04/2026):
+  - cabecera de sensores reorganizada (Spark/YARN en primera fila junto a fuentes),
+  - enlace `DAG limpieza` movido a primera fila y sincronizado en color con `HDFS disco`,
+  - auto-trigger de limpieza cuando `HDFS disco >= DISK_CLEANUP_USAGE_THRESHOLD` (default `88`),
+  - tarjetas KPI compactadas (`Vehiculos / eventos` en tarjeta unificada),
+  - motivos de reentreno ampliados con "cobertura esperada por vehiculos activos".
+- Documentacion funcional/operativa/memoria actualizada a estado real del sistema (dashboard, manual, operaciones y API).
 
 ### Fixed
 

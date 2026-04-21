@@ -96,6 +96,8 @@ public final class LogisticsAnalyticsJob {
         // Inicializacion comun de Spark + Hive + Cassandra, y dispatch por modo.
         String mode = args.length == 0 ? "batch" : args[0].toLowerCase(Locale.ROOT);
         String sqlTimeZone = System.getenv().getOrDefault("SPARK_SQL_TIMEZONE", "Europe/Madrid");
+        String sparkSerializer =
+                System.getenv().getOrDefault("SPARK_SERIALIZER", "org.apache.spark.serializer.KryoSerializer");
 
         SparkSession spark = SparkSession.builder()
                 .appName("LogisticsKddJob")
@@ -107,7 +109,7 @@ public final class LogisticsAnalyticsJob {
                 .config("spark.sql.adaptive.localShuffleReader.enabled", "true")
                 .config("spark.sql.adaptive.skewJoin.enabled", "true")
                 .config("spark.sql.autoBroadcastJoinThreshold", AUTO_BROADCAST_THRESHOLD)
-                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                .config("spark.serializer", sparkSerializer)
                 .config("spark.rdd.compress", "true")
                 .config("spark.shuffle.compress", "true")
                 .config("spark.shuffle.spill.compress", "true")

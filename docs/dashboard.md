@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Especificacion funcional del dashboard`
-- Version: `v1.4`
-- Fecha: `04/04/2026`
+- Version: `v1.5`
+- Fecha: `21/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Indice
@@ -16,11 +16,12 @@
 4. Filtros de Tiempo Real (solo vista izquierda)
 5. Filtros de Analisis Logistico (solo vista derecha)
 6. Reentreno IA (estado de modelo)
-7. Reglas de interpretacion de ruta por vehiculo
-8. ETA en tabla e historial de vehiculo
-9. Datos y nodos actuales
-10. Reinicio limpio de demo
-11. Nota de uso
+7. Politica de limpieza automatica por HDFS
+8. Reglas de interpretacion de ruta por vehiculo
+9. ETA en tabla e historial de vehiculo
+10. Datos y nodos actuales
+11. Reinicio limpio de demo
+12. Nota de uso
 
 ## Objetivo
 
@@ -73,6 +74,7 @@ Devuelve:
 - `GET /api/debug/sources`
 - `POST /api/ml/retrain`
 - `GET /api/ml/retrain/status`
+- `POST /api/platform/cleanup/trigger`
 
 Parametros clave en `GET /api/network/best-route`:
 
@@ -140,6 +142,26 @@ Muestra:
   - `Patron horario aplicado` (`auto`, `peak`, `offpeak`, `night`),
   - `Score riesgo`, `Score eco`, `Incertidumbre media`,
   - `Prob. llegada en hora` y bloque `Explicacion IA`.
+
+### Cabecera operativa (fuentes + sensores)
+
+- Primera fila de chips:
+  - fuente de vehiculos (`Cassandra` o `Nifi Input`),
+  - fuente de clima (`Cassandra` o `Nifi Raw Archive`),
+  - `Spark: RUNNING/UNKNOWN`,
+  - `YARN nodo: RUNNING/UNKNOWN`,
+  - enlace `DAG limpieza`.
+- El enlace `DAG limpieza` replica el color del estado de `HDFS disco`:
+  - verde (`ok`),
+  - amarillo (`warn`),
+  - rojo (`critical`/`bad`).
+- Segunda fila de sensores:
+  - `HDFS disco`,
+  - `Limpieza DAG` (estado del ultimo run),
+  - `Ultima limpieza local`,
+  - enlaces operativos `YARN` y `Spark History`.
+- Tarjetas KPI en una sola fila horizontal:
+  - se compacta `Vehiculos / eventos` en una tarjeta unificada para ahorrar ancho.
 
 ### Insights de red (live)
 
@@ -246,6 +268,20 @@ Reglas operativas de recomendacion:
 - Histeresis con dos umbrales (`RETRAIN_RECOMMEND_ON_THRESHOLD`, `RETRAIN_RECOMMEND_OFF_THRESHOLD`).
 - Enfriamiento tras exito (`RETRAIN_COOLDOWN_HOURS`) para evitar reentrenos consecutivos.
 - Persistencia de estado y recomendacion en Cassandra (`transport.model_retrain_state`).
+- En motivos de cobertura live se muestran:
+  - cobertura real de aristas con muestra live,
+  - cobertura esperada por vehiculos activos.
+
+## Politica de limpieza automatica por HDFS
+
+El dashboard integra una proteccion operativa cuando sube el uso de disco:
+
+- Umbral: `DISK_CLEANUP_USAGE_THRESHOLD` (por defecto `88`).
+- Si `HDFS disco >= umbral`, el frontend dispara `POST /api/platform/cleanup/trigger`.
+- El backend ejecuta `scripts/safe_disk_cleanup.sh` de forma asincrona.
+- Existe antirebote:
+  - no lanza si ya hay limpieza en curso,
+  - respeta cooldown (`DISK_CLEANUP_TRIGGER_COOLDOWN_SECONDS`, por defecto `900` s).
 
 Comportamiento del job de reentreno (Spark batch):
 

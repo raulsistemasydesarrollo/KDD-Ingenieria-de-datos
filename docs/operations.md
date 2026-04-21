@@ -548,7 +548,7 @@ ORDER BY window_start_utc DESC
 LIMIT 10;
 ```
 
-## Bitacora operativa (actualizada 04/04/2026)
+## Bitacora operativa (actualizada 21/04/2026)
 
 Cambios aplicados:
 
@@ -561,6 +561,10 @@ Cambios aplicados:
 7. Dashboard muestra `Ultimo reentreno` y `Siguiente programado` en cabecera (hora Madrid).
 8. Trigger manual de reentreno bloqueado cuando existe ejecucion activa desde Airflow (`409`).
 9. Guia operativa de preview HDFS actualizada con opcion segura por `/etc/hosts` y riesgos del cambio temporal en `hdfs-site.xml`.
+10. Cabecera de sensores reorganizada: `Spark` y `YARN nodo` en primera fila junto a fuentes.
+11. Enlace `DAG limpieza` movido a primera fila y sincronizado en color con `HDFS disco`.
+12. Nuevo endpoint de limpieza operacional: `POST /api/platform/cleanup/trigger`.
+13. Auto-trigger de limpieza desde dashboard cuando `HDFS disco >= DISK_CLEANUP_USAGE_THRESHOLD` (default `88`), con lock y cooldown.
 
 ## Nota de tablas en tiempo real
 
@@ -676,6 +680,9 @@ Bloques de cabecera en estado actual:
    - `Ultimo reentreno`
    - `Siguiente programado`
    - mostrado en `Europe/Madrid`.
+4. Sensores de plataforma:
+   - fila 1: fuentes + `Spark` + `YARN nodo` + `DAG limpieza`,
+   - fila 2: `HDFS disco`, `Limpieza DAG`, `Ultima limpieza local`, enlaces `YARN` y `Spark History`.
 
 ### Endpoints
 
@@ -691,6 +698,14 @@ curl -s -X POST http://localhost:8501/api/ml/retrain \
 
 ```bash
 curl -s http://localhost:8501/api/ml/retrain/status
+```
+
+- Trigger limpieza de disco (manual):
+
+```bash
+curl -s -X POST http://localhost:8501/api/platform/cleanup/trigger \
+  -H 'Content-Type: application/json' \
+  -d '{"trigger":"manual_dashboard"}'
 ```
 
 Respuesta ampliada:
@@ -710,6 +725,9 @@ Respuesta ampliada:
 - `RETRAIN_COOLDOWN_HOURS`
 - `RETRAIN_STATUS_POLL_CACHE_SECONDS`
 - `CASSANDRA_RETRAIN_STATE_TABLE` (por defecto: `model_retrain_state`)
+- `DISK_CLEANUP_USAGE_THRESHOLD` (default `88`)
+- `DISK_CLEANUP_TIMEOUT_SECONDS`
+- `DISK_CLEANUP_TRIGGER_COOLDOWN_SECONDS`
 
 ### Persistencia Cassandra
 
@@ -724,6 +742,12 @@ docker compose exec -T cassandra cqlsh -e "SELECT model_name, last_success_at, l
 1. El DAG mensual `logistics_kdd_monthly_maintenance` opera con `max_active_runs=1`.
 2. Si existe reentreno en curso (dashboard o Airflow), `POST /api/ml/retrain` devuelve `409`.
 3. El estado compartido permite que la cabecera refleje `running` cuando el trigger viene desde Airflow.
+
+### Politica de auto-limpieza por HDFS
+
+1. Si `HDFS disco` supera o iguala el umbral (`DISK_CLEANUP_USAGE_THRESHOLD`), la UI intenta disparar limpieza.
+2. El backend rechaza con `409` cuando ya hay limpieza activa o dentro de cooldown.
+3. Tras limpieza, se invalida cache de estado operativo para refrescar sensores.
 
 ## Preview HDFS en navegador (temporal y riesgos)
 

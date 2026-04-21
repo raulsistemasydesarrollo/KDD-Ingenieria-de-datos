@@ -35,6 +35,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 try:
@@ -78,6 +79,11 @@ RETRAIN_STATE_TABLE = os.getenv("CASSANDRA_RETRAIN_STATE_TABLE", "model_retrain_
 RETRAIN_MODEL_NAME = os.getenv("RETRAIN_MODEL_NAME", "delay_risk_rf")
 RETRAIN_RUNTIME_STATE_FILE = PROJECT_ROOT / "data" / "state" / "retrain_runtime_state.json"
 RETRAIN_EXTERNAL_STATE_MAX_AGE_SECONDS = int(os.getenv("RETRAIN_EXTERNAL_STATE_MAX_AGE_SECONDS", "21600"))
+DISK_CLEANUP_STATE_FILE = PROJECT_ROOT / "data" / "state" / "disk_cleanup_state.json"
+DISK_CLEANUP_SCRIPT = PROJECT_ROOT / "scripts" / "safe_disk_cleanup.sh"
+DISK_CLEANUP_TIMEOUT_SECONDS = int(os.getenv("DISK_CLEANUP_TIMEOUT_SECONDS", "900"))
+DISK_CLEANUP_TRIGGER_COOLDOWN_SECONDS = int(os.getenv("DISK_CLEANUP_TRIGGER_COOLDOWN_SECONDS", "900"))
+OPS_STATUS_CACHE_SECONDS = int(os.getenv("OPS_STATUS_CACHE_SECONDS", "20"))
 _RETRAIN_LOCK = threading.Lock()
 _RETRAIN_STATE = {
     "status": "idle",  # idle | running | done | error
@@ -94,6 +100,19 @@ _RETRAIN_ADVICE_CACHE = {"computed_at": None, "payload": None}
 STATIC_DATA_CACHE_TTL_SECONDS = int(os.getenv("STATIC_DATA_CACHE_TTL_SECONDS", "20"))
 _STATIC_DATA_CACHE = {}
 _STATIC_DATA_CACHE_LOCK = threading.Lock()
+_OPS_STATUS_CACHE_LOCK = threading.Lock()
+_OPS_STATUS_CACHE = {"loaded_at": 0.0, "value": None}
+_DISK_CLEANUP_TRIGGER_LOCK = threading.Lock()
+_DISK_CLEANUP_TRIGGER_STATE = {
+    "status": "idle",  # idle | running | done | error
+    "trigger": None,
+    "message": "Sin ejecuciones de limpieza iniciadas desde dashboard.",
+    "started_at": None,
+    "finished_at": None,
+    "duration_seconds": None,
+    "exit_code": None,
+    "last_started_ts": 0.0,
+}
 
 MODEL_CANDIDATES = [
     {"name": "baseline_rf", "description": "Base: variables operativas esenciales (velocidad/tipo/almacen)."},
@@ -128,6 +147,281 @@ def _get_cached_static_data(cache_key: str, paths, loader):
             "loaded_at": now,
             "value": value,
         }
+    return value
+
+
+def run_command(command, timeout_seconds=8):
+    try:
+        proc = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=max(2, int(timeout_seconds)),
+            check=False,
+        )
+        return {
+            "ok": proc.returncode == 0,
+            "code": int(proc.returncode),
+            "stdout": (proc.stdout or "").strip(),
+            "stderr": (proc.stderr or "").strip(),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "code": -1,
+            "stdout": "",
+            "stderr": str(exc),
+        }
+
+
+def fetch_json_url(url: str, timeout_seconds: int = 5):
+    try:
+        req = Request(url, headers={"Accept": "application/json"})
+        with urlopen(req, timeout=max(2, int(timeout_seconds))) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _status_level_from_disk_usage(usage_percent: int):
+    if usage_percent >= 90:
+        return "critical"
+    if usage_percent >= 85:
+        return "warn"
+    return "ok"
+
+
+def _parse_yarn_apps_table(raw_text: str):
+    apps = []
+    if not raw_text:
+        return apps
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if not line.startswith("application_"):
+            continue
+        parts = re.split(r"\s+", line)
+        if len(parts) < 8:
+            continue
+        tracking_url = parts[-1] if len(parts) >= 9 else None
+        apps.append(
+            {
+                "application_id": parts[0],
+                "application_name": parts[1],
+                "application_type": parts[2],
+                "user": parts[3],
+                "queue": parts[4],
+                "state": parts[5],
+                "final_state": parts[6],
+                "progress": parts[7],
+                "tracking_url": None if tracking_url == "N/A" else tracking_url,
+            }
+        )
+    return apps
+
+
+def _parse_first_yarn_node_state(raw_text: str):
+    if not raw_text:
+        return None
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("Total Nodes:") or line.startswith("Node-Id"):
+            continue
+        parts = re.split(r"\s+", line)
+        if len(parts) < 2:
+            continue
+        return {
+            "node_id": parts[0],
+            "state": parts[1],
+            "healthy": str(parts[1]).upper() == "RUNNING",
+        }
+    return None
+
+
+def load_last_disk_cleanup_state():
+    if not DISK_CLEANUP_STATE_FILE.exists():
+        return None
+    try:
+        raw = json.loads(DISK_CLEANUP_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return {
+        "updated_at": raw.get("updated_at"),
+        "threshold_percent": int(raw.get("threshold_percent") or 88),
+        "usage_before_percent": int(raw.get("usage_before_percent") or 0),
+        "usage_after_percent": int(raw.get("usage_after_percent") or 0),
+        "cleanup_executed": bool(raw.get("cleanup_executed")),
+        "deleted_counts": raw.get("deleted_counts") if isinstance(raw.get("deleted_counts"), dict) else {},
+    }
+
+
+def load_last_cleanup_dag_run():
+    cmd = [
+        "docker",
+        "exec",
+        "airflow-postgres",
+        "psql",
+        "-U",
+        "airflow",
+        "-d",
+        "airflow",
+        "-At",
+        "-F",
+        "|",
+        "-c",
+        (
+            "select run_id, state, start_date, end_date "
+            "from dag_run "
+            "where dag_id='kdd_daily_disk_cleanup' "
+            "order by start_date desc limit 1;"
+        ),
+    ]
+    out = run_command(cmd, timeout_seconds=7)
+    if not out["ok"] or not out["stdout"]:
+        return None
+    first_line = out["stdout"].splitlines()[0].strip()
+    parts = first_line.split("|")
+    if len(parts) < 4:
+        return None
+    return {
+        "run_id": parts[0] or None,
+        "state": parts[1] or None,
+        "start_date": parts[2] or None,
+        "end_date": parts[3] or None,
+    }
+
+
+def _build_platform_status_uncached():
+    rm_apps = fetch_json_url(
+        "http://hadoop:8088/ws/v1/cluster/apps?states=RUNNING,ACCEPTED&applicationTypes=SPARK",
+        timeout_seconds=6,
+    )
+    rm_nodes = fetch_json_url("http://hadoop:8088/ws/v1/cluster/nodes", timeout_seconds=6)
+    hdfs_disk_out = run_command(
+        ["docker", "exec", "hadoop", "bash", "-lc", "df -P /data/hdfs | tail -n 1"],
+        timeout_seconds=6,
+    )
+
+    apps_raw = (((rm_apps or {}).get("apps") or {}).get("app") or [])
+    apps = []
+    for app in apps_raw:
+        if not isinstance(app, dict):
+            continue
+        apps.append(
+            {
+                "application_id": str(app.get("id") or ""),
+                "application_name": str(app.get("name") or ""),
+                "application_type": str(app.get("applicationType") or ""),
+                "user": str(app.get("user") or ""),
+                "queue": str(app.get("queue") or ""),
+                "state": str(app.get("state") or ""),
+                "final_state": str(app.get("finalStatus") or ""),
+                "progress": str(app.get("progress") or ""),
+                "tracking_url": str(app.get("trackingUrl") or "") or None,
+            }
+        )
+
+    spark_streaming = next((a for a in apps if str(a.get("application_name")) == "LogisticsKddJob"), None)
+    if spark_streaming is None and apps:
+        spark_streaming = apps[0]
+
+    nodes_raw = (((rm_nodes or {}).get("nodes") or {}).get("node") or [])
+    node_status = None
+    for node in nodes_raw:
+        if not isinstance(node, dict):
+            continue
+        state_raw = str(node.get("state") or "UNKNOWN").upper()
+        node_status = {
+            "node_id": str(node.get("id") or "unknown"),
+            "state": state_raw,
+            "healthy": state_raw == "RUNNING",
+        }
+        break
+    if node_status is None:
+        node_status = {"node_id": "unknown", "state": "UNKNOWN", "healthy": False}
+
+    disk_use_percent = None
+    disk_avail = None
+    disk_size = None
+    if hdfs_disk_out.get("ok") and hdfs_disk_out.get("stdout"):
+        parts = re.split(r"\s+", hdfs_disk_out["stdout"])
+        if len(parts) >= 6:
+            try:
+                disk_size = parts[1]
+                disk_avail = parts[3]
+                disk_use_percent = int(str(parts[4]).replace("%", ""))
+            except ValueError:
+                disk_use_percent = None
+
+    cleanup_dag_run = load_last_cleanup_dag_run()
+    local_cleanup_state = load_last_disk_cleanup_state()
+
+    spark_state = str((spark_streaming or {}).get("state") or "NOT_FOUND").upper()
+    spark_running = spark_state == "RUNNING"
+    tracking_url = (spark_streaming or {}).get("tracking_url")
+    app_id = (spark_streaming or {}).get("application_id")
+    if app_id:
+        tracking_url = f"http://localhost:8088/proxy/{app_id}/"
+
+    return {
+        "captured_at": to_iso(now_utc()),
+        "spark_streaming": {
+            "application_id": app_id,
+            "state": spark_state,
+            "running": spark_running,
+            "tracking_url": tracking_url,
+        },
+        "yarn_node": node_status,
+        "hdfs_disk": {
+            "use_percent": disk_use_percent,
+            "available": disk_avail,
+            "size": disk_size,
+            "status": _status_level_from_disk_usage(disk_use_percent) if isinstance(disk_use_percent, int) else "unknown",
+        },
+        "cleanup_policy": {
+            "dag_id": "kdd_daily_disk_cleanup",
+            "schedule": "0 */4 * * *",
+            "schedule_human": "Cada 4 horas",
+            "disk_threshold_percent": int(os.getenv("DISK_CLEANUP_USAGE_THRESHOLD", "88")),
+            "safe_scope": [
+                "nifi/raw-archive/gps",
+                "nifi/raw-archive/weather",
+                "nifi/raw-archive/failures",
+                "nifi/input (eventos antiguos)",
+                "/tmp/checkpoints en HDFS",
+            ],
+            "protected_data": [
+                "/data/raw/gps_events.jsonl",
+                "/data/curated",
+                "tablas Hive",
+                "historicos para entrenamiento",
+            ],
+            "last_dag_run": cleanup_dag_run,
+            "last_local_cleanup": local_cleanup_state,
+        },
+        "links": {
+            "yarn_running_apps": "http://localhost:8088/cluster/apps/RUNNING",
+            "spark_history": "http://localhost:18080",
+            "airflow_cleanup_dag": "http://localhost:8080/dags/kdd_daily_disk_cleanup/grid",
+        },
+    }
+
+
+def get_platform_status_cached():
+    now_ts = time.time()
+    with _OPS_STATUS_CACHE_LOCK:
+        cached = _OPS_STATUS_CACHE.get("value")
+        loaded_at = float(_OPS_STATUS_CACHE.get("loaded_at") or 0.0)
+        if cached and (now_ts - loaded_at) <= max(5, OPS_STATUS_CACHE_SECONDS):
+            return cached
+
+    value = _build_platform_status_uncached()
+    with _OPS_STATUS_CACHE_LOCK:
+        _OPS_STATUS_CACHE["value"] = value
+        _OPS_STATUS_CACHE["loaded_at"] = now_ts
     return value
 
 
@@ -476,6 +770,64 @@ def start_retrain_if_idle(trigger: str = "manual"):
         return True, dict(_RETRAIN_STATE)
 
 
+def _run_disk_cleanup_worker(trigger: str):
+    started = now_utc()
+    with _DISK_CLEANUP_TRIGGER_LOCK:
+        _DISK_CLEANUP_TRIGGER_STATE["status"] = "running"
+        _DISK_CLEANUP_TRIGGER_STATE["trigger"] = trigger
+        _DISK_CLEANUP_TRIGGER_STATE["message"] = "Limpieza de disco en ejecucion..."
+        _DISK_CLEANUP_TRIGGER_STATE["started_at"] = to_iso(started)
+        _DISK_CLEANUP_TRIGGER_STATE["finished_at"] = None
+        _DISK_CLEANUP_TRIGGER_STATE["duration_seconds"] = None
+        _DISK_CLEANUP_TRIGGER_STATE["exit_code"] = None
+
+    if not DISK_CLEANUP_SCRIPT.exists():
+        status = "error"
+        exit_code = 127
+        msg = f"Script no encontrado: {DISK_CLEANUP_SCRIPT}"
+    else:
+        out = run_command(["bash", str(DISK_CLEANUP_SCRIPT)], timeout_seconds=max(30, DISK_CLEANUP_TIMEOUT_SECONDS))
+        status = "done" if out.get("ok") else "error"
+        exit_code = int(out.get("code") or 1)
+        stderr = str(out.get("stderr") or "").strip()
+        msg = "Limpieza de disco completada." if status == "done" else f"Limpieza de disco fallo (code={exit_code}): {stderr or 'sin detalle'}"
+
+    finished = now_utc()
+    with _DISK_CLEANUP_TRIGGER_LOCK:
+        _DISK_CLEANUP_TRIGGER_STATE["status"] = status
+        _DISK_CLEANUP_TRIGGER_STATE["message"] = msg
+        _DISK_CLEANUP_TRIGGER_STATE["finished_at"] = to_iso(finished)
+        _DISK_CLEANUP_TRIGGER_STATE["duration_seconds"] = round((finished - started).total_seconds(), 2)
+        _DISK_CLEANUP_TRIGGER_STATE["exit_code"] = exit_code
+
+    with _OPS_STATUS_CACHE_LOCK:
+        _OPS_STATUS_CACHE["loaded_at"] = 0.0
+        _OPS_STATUS_CACHE["value"] = None
+
+
+def start_disk_cleanup_if_allowed(trigger: str = "manual_dashboard"):
+    now_ts = time.time()
+    with _DISK_CLEANUP_TRIGGER_LOCK:
+        if _DISK_CLEANUP_TRIGGER_STATE.get("status") == "running":
+            return False, "running", dict(_DISK_CLEANUP_TRIGGER_STATE)
+        last_started_ts = float(_DISK_CLEANUP_TRIGGER_STATE.get("last_started_ts") or 0.0)
+        cooldown = max(30, int(DISK_CLEANUP_TRIGGER_COOLDOWN_SECONDS))
+        if (now_ts - last_started_ts) < cooldown:
+            return False, "cooldown", dict(_DISK_CLEANUP_TRIGGER_STATE)
+
+        _DISK_CLEANUP_TRIGGER_STATE["status"] = "running"
+        _DISK_CLEANUP_TRIGGER_STATE["trigger"] = trigger
+        _DISK_CLEANUP_TRIGGER_STATE["message"] = "Limpieza de disco en cola..."
+        _DISK_CLEANUP_TRIGGER_STATE["started_at"] = to_iso(now_utc())
+        _DISK_CLEANUP_TRIGGER_STATE["finished_at"] = None
+        _DISK_CLEANUP_TRIGGER_STATE["duration_seconds"] = None
+        _DISK_CLEANUP_TRIGGER_STATE["exit_code"] = None
+        _DISK_CLEANUP_TRIGGER_STATE["last_started_ts"] = now_ts
+        worker = threading.Thread(target=_run_disk_cleanup_worker, args=(trigger,), daemon=True)
+        worker.start()
+        return True, "started", dict(_DISK_CLEANUP_TRIGGER_STATE)
+
+
 def _retrain_default_persisted_state():
     return {
         "model_name": RETRAIN_MODEL_NAME,
@@ -729,6 +1081,8 @@ def _compute_retrain_advice_payload():
     edges_with_live_samples = int(live_edge_summary.get("edges_with_live_samples") or 0)
     total_edges = max(1, len(edges))
     live_coverage_ratio = 0.0 if not edges else edges_with_live_samples / total_edges
+    expected_edges_by_active_vehicles = min(total_edges, max(0, vehicles_considered))
+    expected_live_coverage_ratio = expected_edges_by_active_vehicles / total_edges
 
     persisted = load_persisted_retrain_state()
     last_success = parse_iso_utc(persisted.get("last_success_at")) if persisted.get("last_success_at") else None
@@ -761,13 +1115,17 @@ def _compute_retrain_advice_payload():
         score += 15
         reasons.append(
             f"Baja cobertura live en aristas ({edges_with_live_samples}/{total_edges}, "
-            f"{round(live_coverage_ratio * 100, 1)}%; porcentaje de aristas del grafo con muestra live reciente)."
+            f"{round(live_coverage_ratio * 100, 1)}%; porcentaje de aristas del grafo con muestra live reciente; "
+            f"cobertura esperada por vehiculos activos: "
+            f"{expected_edges_by_active_vehicles}/{total_edges}, {round(expected_live_coverage_ratio * 100, 1)}%)."
         )
     elif live_coverage_ratio < 0.5:
         score += 7
         reasons.append(
             f"Cobertura live mejorable ({edges_with_live_samples}/{total_edges}, "
-            f"{round(live_coverage_ratio * 100, 1)}%; porcentaje de aristas del grafo con muestra live reciente)."
+            f"{round(live_coverage_ratio * 100, 1)}%; porcentaje de aristas del grafo con muestra live reciente; "
+            f"cobertura esperada por vehiculos activos: "
+            f"{expected_edges_by_active_vehicles}/{total_edges}, {round(expected_live_coverage_ratio * 100, 1)}%)."
         )
 
     if age_minutes is not None and age_minutes > 180:
@@ -818,6 +1176,7 @@ def _compute_retrain_advice_payload():
             "avg_delay_minutes": round(avg_delay, 2),
             "weather_factor": round(weather_factor, 3),
             "live_coverage_ratio": round(live_coverage_ratio, 3),
+            "live_coverage_expected_ratio": round(expected_live_coverage_ratio, 3),
             "vehicles_considered": vehicles_considered,
             "edges_with_live_samples": edges_with_live_samples,
             "total_edges": len(edges),
@@ -843,8 +1202,16 @@ def list_latest_files(path: Path, pattern: str, limit: int):
     # Devuelve los ficheros mas recientes por fecha de modificacion.
     if not path.exists():
         return []
-    files = sorted(path.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)
-    return files[:limit]
+    # Evita errores de carrera cuando otro proceso borra ficheros mientras se listan.
+    candidates = []
+    for file_path in path.glob(pattern):
+        try:
+            mtime = file_path.stat().st_mtime
+        except OSError:
+            continue
+        candidates.append((mtime, file_path))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [file_path for _, file_path in candidates[:limit]]
 
 
 def load_gps_events(max_files: int = 120, max_events: int = 7000):
@@ -2613,6 +2980,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path == "/api/platform/cleanup/trigger":
+            payload = self._read_json_body()
+            trigger = str(payload.get("trigger") or "manual_dashboard")
+            started, reason, cleanup_state = start_disk_cleanup_if_allowed(trigger=trigger)
+            self._json(
+                {
+                    "started": started,
+                    "reason": reason,
+                    "cleanup_state": cleanup_state,
+                },
+                status=HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT,
+            )
+            return
+
         self._json({"error": "endpoint no soportado"}, status=HTTPStatus.NOT_FOUND)
 
     def _handle_api(self, path, query):
@@ -2669,6 +3050,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if latest_rows_for_network and latest_source_for_network == "cassandra"
                 else build_overview(events, weather_rows)
             )
+            platform_status = get_platform_status_cached()
             self._json({
                 "overview": overview,
                 "warehouses": warehouses,
@@ -2676,6 +3058,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "vehicle_source": latest_source_for_network,
                 "weather_source": weather_source,
                 "live_edge_summary": live_edge_summary,
+                "platform_status": platform_status,
             })
             return
 

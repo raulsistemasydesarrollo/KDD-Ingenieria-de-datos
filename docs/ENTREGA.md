@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Indice maestro de entrega`
-- Version: `v1.4`
-- Fecha: `04/04/2026`
+- Version: `v1.5`
+- Fecha: `21/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## 1. Documentos principales
@@ -21,6 +21,7 @@
 5. Manual de usuario integral (arranque/parada, dashboard, Airflow DAGs y uso diario):
    - [docs/manual-usuario.md](./manual-usuario.md)
 6. Release notes de la iteracion:
+   - [docs/release-notes-2026-04-21.md](./release-notes-2026-04-21.md)
    - [docs/release-notes-2026-04-04.md](./release-notes-2026-04-04.md)
 7. Guia general del repositorio:
    - [README.md](../README.md)
@@ -54,13 +55,17 @@
    - `GET /api/ml/retrain/status`,
    - estado persistido en `transport.model_retrain_state`,
    - panel de cabecera con modelo en uso + candidatos y criterio de seleccion.
-9. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
-10. Entrenamiento ML robustecido con comparativa automatica entre `baseline_rf`, `tuned_baseline_rf` y `enhanced_rf`, seleccionando el menor RMSE en cada batch/reentreno.
+9. Operativa de limpieza segura de disco en dashboard:
+   - `POST /api/platform/cleanup/trigger`,
+   - auto-trigger cuando `HDFS disco >= DISK_CLEANUP_USAGE_THRESHOLD` (default `88`),
+   - lock/cooldown para evitar ejecuciones concurrentes.
+10. Red geografica consolidada (15 nodos) y flota ampliada (15 vehiculos).
+11. Entrenamiento ML robustecido con comparativa automatica entre `baseline_rf`, `tuned_baseline_rf` y `enhanced_rf`, seleccionando el menor RMSE en cada batch/reentreno.
     - `enhanced_rf` incorpora clima y congestion alineados temporalmente (ventanas de 15 minutos) y es el seleccionado en la validacion final de esta iteracion.
-11. Documentacion visual actualizada con capturas operativas vigentes:
+12. Documentacion visual actualizada con capturas operativas vigentes:
     - `docs/airflow.png`
     - `docs/dashboard.png`
-12. Preview HDFS desde navegador documentado con opcion segura (alias host) y opcion temporal con riesgos operativos.
+13. Preview HDFS desde navegador documentado con opcion segura (alias host) y opcion temporal con riesgos operativos.
 
 ## 3. Checklist de revision previa a entrega
 

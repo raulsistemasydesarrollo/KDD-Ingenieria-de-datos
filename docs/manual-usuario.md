@@ -131,6 +131,12 @@ Regla clave:
 
 - Los filtros de una vista no afectan a la otra.
 
+Cabecera operativa actual:
+
+1. Primera fila: fuentes de datos + `Spark` + `YARN nodo` + acceso `DAG limpieza`.
+2. Segunda fila: `HDFS disco`, estado de `Limpieza DAG`, ultima limpieza local y enlaces de plataforma.
+3. El enlace `DAG limpieza` usa el mismo color de estado que `HDFS disco` (`ok/warn/bad`).
+
 ### 4.2 Vista de Tiempo Real (izquierda)
 
 Elementos principales:
@@ -229,6 +235,25 @@ Comportamiento:
    - `Ultimo reentreno`
    - `Siguiente programado`
    en horario `Europe/Madrid`.
+5. Si aparece motivo de cobertura live, incluye:
+   - cobertura real de aristas,
+   - cobertura esperada por vehiculos activos.
+
+### 4.7 Limpieza automatica por uso de disco
+
+Comportamiento operativo:
+
+1. Umbral por defecto: `88%` (`DISK_CLEANUP_USAGE_THRESHOLD`).
+2. Si `HDFS disco >= umbral`, el dashboard intenta disparar limpieza automaticamente.
+3. El backend evita ejecuciones duplicadas con lock y cooldown.
+
+Trigger manual por API:
+
+```bash
+curl -s -X POST http://localhost:8501/api/platform/cleanup/trigger \
+  -H 'Content-Type: application/json' \
+  -d '{"trigger":"manual_dashboard"}'
+```
 
 ## 5. Uso de DAGs en Airflow
 

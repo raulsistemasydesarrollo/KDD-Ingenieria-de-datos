@@ -18,6 +18,7 @@ SPARK_EXECUTOR_MEMORY="${SPARK_EXECUTOR_MEMORY:-1536m}"
 SPARK_EXECUTOR_CORES="${SPARK_EXECUTOR_CORES:-2}"
 SPARK_MIN_EXECUTORS="${SPARK_DYNAMIC_ALLOCATION_MIN_EXECUTORS:-1}"
 SPARK_MAX_EXECUTORS="${SPARK_DYNAMIC_ALLOCATION_MAX_EXECUTORS:-2}"
+SPARK_SERIALIZER="${SPARK_SERIALIZER:-org.apache.spark.serializer.JavaSerializer}"
 export STREAMING_MAX_OFFSETS_PER_TRIGGER="${STREAMING_MAX_OFFSETS_PER_TRIGGER:-6000}"
 
 if [ ! -f "${JAR_PATH}" ] || [ -n "$(find src pom.xml -type f -newer "${JAR_PATH}" 2>/dev/null | head -n 1)" ]; then
@@ -51,7 +52,7 @@ fi
   --conf spark.sql.adaptive.enabled=true \
   --conf spark.sql.adaptive.coalescePartitions.enabled=true \
   --conf spark.sql.adaptive.skewJoin.enabled=true \
-  --conf spark.serializer=org.apache.spark.serializer.KryoSerializer \
+  --conf "spark.serializer=${SPARK_SERIALIZER}" \
   --conf spark.rdd.compress=true \
   --conf spark.shuffle.compress=true \
   --conf spark.shuffle.spill.compress=true \

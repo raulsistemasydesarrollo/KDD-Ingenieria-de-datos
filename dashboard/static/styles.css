@@ -80,6 +80,14 @@ p {
 .source-badges {
   margin-top: 0.55rem;
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.45rem;
+}
+
+.platform-status-badges {
+  margin-top: 0.42rem;
+  display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
 }
@@ -94,6 +102,82 @@ p {
   font-weight: 700;
   letter-spacing: 0.01em;
   text-transform: uppercase;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.status-badge.status-ok {
+  color: #8ef7c3;
+  border-color: #1f8f63;
+  background: rgba(31, 143, 99, 0.22);
+}
+
+.status-badge.status-warn {
+  color: #ffd166;
+  border-color: #9d6d10;
+  background: rgba(140, 90, 12, 0.22);
+}
+
+.status-badge.status-bad {
+  color: #ff8ea1;
+  border-color: #8f2a3d;
+  background: rgba(143, 42, 61, 0.24);
+}
+
+.status-badge.status-neutral {
+  color: var(--muted);
+  border-color: var(--line);
+  background: rgba(130, 153, 176, 0.12);
+}
+
+.status-link {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #2f6fa2;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.72rem;
+  color: #95d8ff;
+  text-decoration: none;
+  background: rgba(31, 86, 132, 0.24);
+}
+
+.status-link:hover {
+  filter: brightness(1.08);
+}
+
+.status-link.status-ok {
+  color: #8ef7c3;
+  border-color: #1f8f63;
+  background: rgba(31, 143, 99, 0.22);
+}
+
+.status-link.status-warn {
+  color: #ffd166;
+  border-color: #9d6d10;
+  background: rgba(140, 90, 12, 0.22);
+}
+
+.status-link.status-bad {
+  color: #ff8ea1;
+  border-color: #8f2a3d;
+  background: rgba(143, 42, 61, 0.24);
+}
+
+.status-link.status-neutral {
+  color: var(--muted);
+  border-color: var(--line);
+  background: rgba(130, 153, 176, 0.12);
 }
 
 .source-badge.source-cassandra {
@@ -190,7 +274,9 @@ body[data-theme="light"] .source-badge.source-unknown {
 
 .model-advice .advice-head {
   display: block;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .model-advice .advice-body {
@@ -206,7 +292,8 @@ body[data-theme="light"] .source-badge.source-unknown {
 
 .model-advice .advice-reason {
   display: block;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .model-summary {
@@ -417,9 +504,10 @@ body[data-theme="light"] .fleet-freshness.stale {
 }
 
 .cards {
-  display: grid;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 0.8rem;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   padding: 0.7rem 1.3rem;
 }
 
@@ -428,6 +516,8 @@ body[data-theme="light"] .fleet-freshness.stale {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.8rem;
+  flex: 0 0 190px;
+  min-width: 190px;
 }
 
 .card h4 {

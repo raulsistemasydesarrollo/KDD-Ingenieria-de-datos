@@ -212,12 +212,73 @@ services:
     volumes:
       - ./spark-app:/opt/spark-app
       - ./data:/opt/project-data:ro
+      - spark_events:/opt/spark-events
+      - ./docker/spark-client/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
       - ./docker/hadoop/conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
       - ./docker/hadoop/conf/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
       - ./docker/hadoop/conf/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml:ro
       - ./docker/hadoop/conf/yarn-site.xml:/opt/hadoop/etc/hadoop/yarn-site.xml:ro
       - ./docker/hive/conf/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
     tty: true
+
+  spark-history:
+    image: proyectobigdata-spark-client
+    container_name: spark-history
+    hostname: spark-history
+    depends_on:
+      hadoop:
+        condition: service_healthy
+    environment:
+      JAVA_HOME: /opt/java/openjdk
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      YARN_CONF_DIR: /opt/hadoop/etc/hadoop
+      SPARK_HOME: /opt/spark
+      SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=file:/opt/spark-events -Dspark.history.fs.update.interval=10s
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.history.HistoryServer"]
+    ports:
+      - "18080:18080"
+    volumes:
+      - spark_events:/opt/spark-events
+      - ./docker/spark-client/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./docker/hadoop/conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./docker/hadoop/conf/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./docker/hadoop/conf/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml:ro
+      - ./docker/hadoop/conf/yarn-site.xml:/opt/hadoop/etc/hadoop/yarn-site.xml:ro
+
+  spark-streaming:
+    image: proyectobigdata-spark-client
+    container_name: spark-streaming
+    hostname: spark-streaming
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      hadoop:
+        condition: service_healthy
+      hive-server:
+        condition: service_started
+      cassandra:
+        condition: service_started
+    environment:
+      JAVA_HOME: /opt/java/openjdk
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+      YARN_CONF_DIR: /opt/hadoop/etc/hadoop
+      SPARK_HOME: /opt/spark
+      HIVE_CONF_DIR: /opt/spark/conf
+      SPARK_SERIALIZER: org.apache.spark.serializer.JavaSerializer
+      STREAMING_STARTING_OFFSETS: latest
+      STREAMING_MAX_OFFSETS_PER_TRIGGER: "6000"
+    command: ["bash", "/opt/spark-app/run-streaming.sh"]
+    volumes:
+      - ./spark-app:/opt/spark-app
+      - ./data:/opt/project-data:ro
+      - spark_events:/opt/spark-events
+      - ./docker/spark-client/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./docker/hadoop/conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./docker/hadoop/conf/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./docker/hadoop/conf/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml:ro
+      - ./docker/hadoop/conf/yarn-site.xml:/opt/hadoop/etc/hadoop/yarn-site.xml:ro
+      - ./docker/hive/conf/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
 
   dashboard:
     build:
@@ -336,6 +397,7 @@ volumes:
   postgres_metastore_data_v3:
   cassandra_data:
   airflow_postgres_data:
+  spark_events:
 
 networks:
   default:

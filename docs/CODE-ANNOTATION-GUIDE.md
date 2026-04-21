@@ -4,8 +4,8 @@
 
 - Proyecto: `Proyecto Big Data KDD - Logistica`
 - Documento: `Mapa de comentarios tecnicos en codigo`
-- Version: `v1.4`
-- Fecha: `04/04/2026`
+- Version: `v1.5`
+- Fecha: `21/04/2026`
 - Repositorio GitHub: `https://github.com/raulsistemasydesarrollo/KDD-Ingenieria-de-datos`
 
 ## Objetivo
@@ -32,6 +32,7 @@ Bloques comentados:
 6. Router API (`/api/overview`, `/api/vehicles/latest`, `/api/network/best-route`, etc.).
 7. Operativa de reentreno IA (`/api/ml/retrain`, `/api/ml/retrain/status`) y cache/recomendacion.
 8. Persistencia de estado de reentreno en Cassandra (`model_retrain_state`).
+9. Operativa de limpieza segura de disco (`/api/platform/cleanup/trigger`) con lock/cooldown.
 
 ## 2. Frontend Dashboard
 
@@ -50,6 +51,7 @@ Bloques comentados:
 7. Registro de eventos (`bindEvents`) y secuencia de arranque (`bootstrap`).
 8. Panel de reentreno IA (`renderRetrainStatePanel`, `triggerRetrain`, `refreshRetrainStatus`).
 9. Optimizacion de ruta multiobjetivo (pesos `time/risk/eco`, `temporalMode`, `avoid_nodes`).
+10. Sensores de plataforma en cabecera y auto-trigger de limpieza por umbral HDFS (`maybeAutoTriggerCleanup`).
 
 ## 3. Spark (Batch + Streaming + ML)
 

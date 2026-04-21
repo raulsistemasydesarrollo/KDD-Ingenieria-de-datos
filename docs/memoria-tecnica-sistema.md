@@ -487,6 +487,7 @@ API principal:
 - `/api/network/insights/history`
 - `/api/ml/retrain` (POST, trigger de reentreno)
 - `/api/ml/retrain/status` (GET, estado + recomendacion)
+- `/api/platform/cleanup/trigger` (POST, trigger de limpieza segura de disco)
 - `/api/debug/sources` (diagnostico de fuentes activas y fallback)
 
 Motor de ruta:
@@ -519,6 +520,12 @@ Frontend:
   - panel de modelos IA en dos bloques:
     - izquierda: `EN USO` + candidato elegido (`A/B/C`) y comparativa RMSE,
     - derecha: descripcion funcional de los 3 candidatos.
+- cabecera de sensores operativos:
+  - fila 1 con fuentes + `Spark` + `YARN nodo` + acceso `DAG limpieza`,
+  - fila 2 con `HDFS disco`, estado de DAG de limpieza y ultima limpieza local.
+- `DAG limpieza` replica el tono de estado de `HDFS disco` (ok/warn/bad).
+- auto-limpieza por umbral:
+  - cuando `HDFS disco >= DISK_CLEANUP_USAGE_THRESHOLD` (default `88`), frontend dispara trigger de limpieza.
 - comportamiento de filtros RT:
   - `TODOS->TODOS` vista global,
   - filtros parciales (`TODOS->X` o `X->TODOS`) soportados.
@@ -598,6 +605,7 @@ Limpieza de Process Groups legacy NiFi:
 5. Separacion visual de flujos NiFi para diagnostico rapido.
 6. Reentreno IA no bloqueante en dashboard (worker asincrono + timeout configurable).
 7. Recomendacion de reentreno con histeresis y cooldown para evitar ejecuciones innecesarias.
+8. Limpieza de disco automatica por umbral con lock/cooldown para evitar ejecuciones concurrentes.
 
 ## 14. Limitaciones conocidas
 

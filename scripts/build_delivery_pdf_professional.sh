@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TODAY="$(date +%F)"
 OUT_PDF="/data/docs/entrega-unificada-profesional-${TODAY}.pdf"
-RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-release-notes-2026-04-04.md}"
+RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-release-notes-2026-04-21.md}"
 
 cd "${ROOT_DIR}/docs"
 

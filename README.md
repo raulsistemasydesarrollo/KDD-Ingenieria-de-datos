@@ -121,6 +121,9 @@ Indice maestro de entrega:
    - Reentreno IA:
      - trigger `POST /api/ml/retrain`
      - estado/recomendacion `GET /api/ml/retrain/status`
+   - Limpieza operativa por umbral de disco:
+     - trigger manual `POST /api/platform/cleanup/trigger`
+     - auto-trigger desde dashboard cuando `HDFS disco >= DISK_CLEANUP_USAGE_THRESHOLD` (default `88`).
 
 ## Scripts operativos
 
@@ -448,7 +451,24 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 - Operativa HDFS UI:
   - se documenta ajuste seguro por `/etc/hosts` para preview de ficheros desde navegador sin afectar Spark.
 - Release notes de esta iteracion:
+  - `docs/release-notes-2026-04-21.md`.
   - `docs/release-notes-2026-04-04.md`.
+
+## Cambios recientes (21/04/2026)
+
+- Dashboard (cabecera/sensores):
+  - tarjetas KPI compactadas para reducir ancho horizontal (`Vehiculos / eventos` unificada),
+  - `Spark` y `YARN nodo` movidos a la primera fila junto a fuentes,
+  - enlace `DAG limpieza` en primera fila y sin duplicados en segunda.
+- Recomendacion IA:
+  - los motivos de cobertura live ahora muestran tambien "cobertura esperada por vehiculos activos".
+- Limpieza de disco:
+  - nuevo endpoint `POST /api/platform/cleanup/trigger`,
+  - auto-disparo desde UI cuando `HDFS disco` alcanza el umbral (`DISK_CLEANUP_USAGE_THRESHOLD`, default `88`),
+  - proteccion de concurrencia + cooldown (`DISK_CLEANUP_TRIGGER_COOLDOWN_SECONDS`).
+- UX de estado:
+  - el enlace `DAG limpieza` replica el color del estado HDFS (`ok/warn/bad`),
+  - texto de recomendacion "Reentreno NO recomendado..." evita saltos innecesarios y solo parte cuando no cabe.
 
 ## Cambios recientes (31/03/2026)
 
@@ -513,6 +533,6 @@ Limpieza de Process Groups legacy de NiFi (manteniendo `kdd_ingestion_auto_v9`):
 - Guia de dashboard y leyenda visual: `docs/dashboard.md`.
 - Endpoint debug de fuentes del dashboard: `GET /api/debug/sources`.
 - Plan TODO de cumplimiento del enunciado por fases KDD: `docs/kdd-todo.md`.
-- Bitacora de cambios de la iteracion 04/04/2026: `docs/release-notes-2026-04-04.md`.
+- Bitacora de cambios de la iteracion 21/04/2026: `docs/release-notes-2026-04-21.md`.
 - Memoria tecnica detallada del sistema (entrega): `docs/memoria-tecnica-sistema.md`.
 - Resumen ejecutivo (1-2 paginas) para portada/anexo inicial: `docs/resumen-ejecutivo-memoria.md`.
